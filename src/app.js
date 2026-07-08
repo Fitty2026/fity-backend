@@ -9,6 +9,9 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+const indexRouter = require('./routes/index');
+app.use('/api', indexRouter);
+
 app.get('/health', async (req, res, next) => {
     try {
         const isMysqlConnected = true; //DB연결코드 없으므로 현재 true처리함.(나중에 수정해야함!)
