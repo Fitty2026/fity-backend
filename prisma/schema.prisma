@@ -1,0 +1,19 @@
+datasource db {
+  provider = "mysql" // 💡 우리 팀의 구원 투수 MySQL 지정
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 예시 user테이블. 나중에 ERD보면서 수정하면 됩니다.
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
