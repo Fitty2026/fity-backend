@@ -1,5 +1,5 @@
-const exampleService = require('../services/example.service');
-const getExample = async (req, res, next) => {
+import * as exampleService from '../services/example.service.js'
+export const getExample = async (req, res, next) => {
     try{
         const data = await exampleService.getExampleData();
         res.status(200).json({
@@ -11,8 +11,4 @@ const getExample = async (req, res, next) => {
     }catch (error){
         next(error);
     }
-};
-
-module.exports = {
-    getExample,
 };

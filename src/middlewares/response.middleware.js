@@ -1,4 +1,4 @@
-const sendResponse = (res, data, message = "요청에 성공하였습니다.") => {
+export const sendResponse = (res, data, message = "요청에 성공하였습니다.") => {
     return res.status(200).json({
         isSuccess: true,
         code: "COMMON200",
@@ -7,7 +7,7 @@ const sendResponse = (res, data, message = "요청에 성공하였습니다.") =
     });
 };
 
-const errorHandler = (err, req, res, next) => {
+export const errorHandler = (err, req, res, next) => {
     console.error(err.stack);
     
     return res.status(err.status || 400).json({ 
@@ -17,5 +17,3 @@ const errorHandler = (err, req, res, next) => {
         result: null
     });
 };
-
-module.exports = { sendResponse, errorHandler };
