@@ -1,5 +1,5 @@
 //SCR-CLO-001
-exports.saveImportType = (importType) => {
+export const saveImportType = (importType) => {
     console.log(`등록방식: ${importType}`);
     return{
         closet_import_type: importType
@@ -7,7 +7,7 @@ exports.saveImportType = (importType) => {
 };
 
 //SCR-CLO-004
-exports.updateItemTags = (itemId, tagValues) => {
+export const updateItemTags = (itemId, tagValues) => {
     console.log(`아이템ID: ${itemId}, 업데이트된 태그: ${tagValues}`);
     return{
         closet_items:[
@@ -21,7 +21,7 @@ exports.updateItemTags = (itemId, tagValues) => {
 };
 
 //SCR-CLO-005
-exports.fetchClosetList = (filter, sort, search) => {
+export const fetchClosetList = (filter, sort, search) => {
     console.log(`요청된 쿼리 filter: ${filter}, sort: ${sort}, search: ${search}`);
     return{
         category_count: {
@@ -49,3 +49,4 @@ exports.fetchClosetList = (filter, sort, search) => {
         ]
     };
 };
+

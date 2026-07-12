@@ -1,6 +1,6 @@
-const { fetchClosetList, saveImportType, updateItemTags } = require('../services/closet.service.js');
+import { fetchClosetList, saveImportType, updateItemTags } from '../services/closet.service.js';
 //SCR-CLO-001
-exports.postImportType = (req, res) => {
+export const postImportType = (req, res) => {
     const { closet_import_type } = req.body;
     const resultData = saveImportType(closet_import_type);
     return res.status(200).json({
@@ -12,7 +12,7 @@ exports.postImportType = (req, res) => {
 };
 
 //SCR-CLO-004
-exports.patchItemTags = (req, res) => {
+export const patchItemTags = (req, res) => {
     const { itemId } = req.params;
     const { tag_values } = req.body;
     const resultData = updateItemTags(itemId, tag_values);
@@ -25,7 +25,7 @@ exports.patchItemTags = (req, res) => {
 };
 
 //SCR-CLO-005
-exports.getClosetList = (req, res) => {
+export const getClosetList = (req, res) => {
     const {filter, sort, search} = req.query;
     const resultData = fetchClosetList(filter, sort, search);
     return res.status(200).json({

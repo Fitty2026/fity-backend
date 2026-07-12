@@ -1,5 +1,5 @@
 datasource db {
-  provider = "mysql" // 💡 우리 팀의 구원 투수 MySQL 지정
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 

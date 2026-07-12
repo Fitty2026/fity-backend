@@ -1,5 +1,5 @@
-const express = require('express');
-const { getClosetList, postImportType, patchItemTags } = require('../controllers/closet.controller.js');
+import express from 'express'
+import { getClosetList, postImportType, patchItemTags } from '../controllers/closet.controller.js';
 const closetRouter = express.Router();
 //SCR-CLO-001
 closetRouter.post('/import-type', postImportType);
@@ -10,4 +10,4 @@ closetRouter.patch('/items/:itemId/tags', patchItemTags);
 //SCR-CLO-005
 closetRouter.get('/',getClosetList);
 
-module.exports = closetRouter;
+export default closetRouter;
