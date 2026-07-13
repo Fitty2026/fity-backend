@@ -7,7 +7,6 @@ import { sendResponse, errorHandler } from './middlewares/response.middleware.js
 import indexRouter from './routes/index.js';
 
 const app = express();
-const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -34,6 +33,4 @@ app.get('/health', async (req, res, next) => {
 
 app.use(errorHandler); //에러핸들러
 
-app.listen(port, () => {
-    console.log(`Fitty Server is running on port ${port}`);
-});
+export default app;
