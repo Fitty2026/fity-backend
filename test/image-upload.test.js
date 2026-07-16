@@ -54,6 +54,31 @@ describe('POST /api/v1/images/upload', () => {
         assert.equal(response.body.code, 'IMAGE4002');
     });
 
+    it('rejects a request without an image type', async () => {
+        const response = await request(app)
+            .post('/api/v1/images/upload')
+            .attach('image', PNG_SIGNATURE, {
+                filename: 'profile.png',
+                contentType: 'image/png'
+            });
+
+        assert.equal(response.status, 400);
+        assert.equal(response.body.code, 'IMAGE4002');
+    });
+
+    it('normalizes a supported image type to the documented value', async () => {
+        const response = await request(app)
+            .post('/api/v1/images/upload')
+            .field('imageType', ' body_profile ')
+            .attach('image', PNG_SIGNATURE, {
+                filename: 'body.png',
+                contentType: 'image/png'
+            });
+
+        assert.equal(response.status, 200);
+        assert.equal(response.body.result.imageType, 'BODY_PROFILE');
+    });
+
     it('rejects non-image files', async () => {
         const response = await request(app)
             .post('/api/v1/images/upload')
