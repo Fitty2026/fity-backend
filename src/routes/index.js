@@ -1,9 +1,12 @@
 import express from 'express';
 import * as exampleController from '../controllers/example.controller.js';
-import imageRouter from './image.routes.js';
-const router = express.Router();
+import { createImageRouter } from './image.routes.js';
 
-router.get('/example', exampleController.getExample);
-router.use('/v1/images', imageRouter);
+export const createIndexRouter = (dependencies) => {
+    const router = express.Router();
 
-export default router;
+    router.get('/example', exampleController.getExample);
+    router.use('/v1/images', createImageRouter(dependencies));
+
+    return router;
+};

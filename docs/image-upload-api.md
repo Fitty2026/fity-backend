@@ -1,4 +1,12 @@
-# BE2 Image/Upload API 명세
+# BE2 이미지 자산 API 명세
+
+## 공통 인증·소유권 규칙
+
+- 모든 이미지 API는 BE1 인증 미들웨어가 설정한 `req.auth.userId`를 사용합니다.
+- 인증 컨텍스트가 없으면 `401 / AUTH4011`을 반환합니다.
+- body, query, header로 전달된 사용자 ID는 소유권 판단에 사용하지 않습니다.
+- 다른 사용자의 이미지와 존재하지 않는 이미지는 모두 `404 / IMAGE4041`로 응답합니다.
+- `storageKey`와 실제 private 저장소 경로는 응답하지 않습니다.
 
 ## IMAGE-01 이미지 업로드
 
@@ -7,79 +15,100 @@
 | HTTP 메서드 | `POST` |
 | API 경로 | `/api/v1/images/upload` |
 | Content-Type | `multipart/form-data` |
-| 파트 | BE2 |
-| 개발현황 | M2 스켈레톤 완료 / M3 저장소 연동 대기 |
-
-### Header
-
-```text
-M2 스켈레톤: 없음
-M3 Auth 통합 후: Authorization: Bearer <JWT_TOKEN>
-```
-
-현재 라우트에는 인증 미들웨어가 없습니다. Auth API가 통합되기 전까지 개발 환경의 업로드 계약 검증에만 사용합니다.
+| 파일 제한 | 1개, 10MB 이하 |
 
 ### Request
 
 | 필드 | 형식 | 필수 | 설명 |
 | --- | --- | --- | --- |
-| `image` | binary | Y | JPG, PNG, WEBP, HEIC, HEIF 형식의 10MB 이하 이미지 |
-| `imageType` | string | Y | `PROFILE`, `BODY_PROFILE`, `CLOSET_ITEM` 중 하나 |
+| `image` | binary | Y | JPG, PNG, WEBP, HEIC, HEIF |
+| `imageType` | string | Y | `PROFILE`, `BODY_PROFILE`, `CLOSET_ITEM` |
 
-### 요청 예시
+`OUTFIT_RESULT`는 클라이언트 업로드 값이 아닙니다. BE4가 `ImageService.createGeneratedImage()`를 호출해 `GENERATED` 또는 `FALLBACK` 결과로 저장합니다.
 
 ```bash
 curl -X POST 'http://localhost:3000/api/v1/images/upload' \
+  -H 'Authorization: Bearer <JWT_TOKEN>' \
   -F 'imageType=BODY_PROFILE' \
   -F 'image=@./body.png;type=image/png'
 ```
 
-### Response
+### Success
 
 ```json
 {
   "isSuccess": true,
   "code": "COMMON200",
-  "message": "이미지 업로드 요청을 정상적으로 수신했습니다.",
+  "message": "이미지를 저장했습니다.",
   "result": {
-    "imageId": 1720870000001,
+    "imageId": 12,
     "imageType": "BODY_PROFILE",
+    "origin": "USER_UPLOAD",
     "originalName": "body.png",
     "mimeType": "image/png",
     "sizeBytes": 184302,
-    "imageUrl": null,
-    "uploadStatus": "RECEIVED"
+    "checksumSha256": "<sha256>",
+    "imageUrl": "/api/v1/images/12/content",
+    "uploadStatus": "ACTIVE",
+    "createdAt": "2026-07-16T09:00:00.000Z"
   }
 }
 ```
 
-M3 완료 후 `imageId`는 User/Profile API의 `profileImageId` 또는 체형·옷장 이미지 참조값으로 사용합니다. 현재 M2 스켈레톤의 ID는 프로세스 내부 임시값이며 재시작 후 유지되지 않습니다. `imageUrl`과 함께 `image_assets` DB 및 실제 저장소 결과로 교체해야 합니다.
+성공 응답은 파일과 `image_assets` 레코드가 모두 저장되고 상태가 `ACTIVE`가 된 뒤에만 반환됩니다.
+MIME과 매직 바이트뿐 아니라 이미지 디코딩과 가로·세로 메타데이터 확인까지 통과해야 저장됩니다.
 
-> 프론트엔드는 M2의 `imageId`와 `imageUrl`을 영구 데이터로 저장하거나 다른 API의 참조값으로 사용하면 안 됩니다. 현재 단계에서는 multipart 요청과 응답·오류 계약 확인에만 사용합니다.
+## IMAGE-02 이미지 메타데이터 조회
 
-### Error
+`GET /api/v1/images/:imageId`
 
-```json
-{
-  "isSuccess": false,
-  "code": "IMAGE4001",
-  "message": "업로드할 이미지가 필요합니다.",
-  "result": null
-}
+인증 사용자 소유의 `ACTIVE` 이미지에 한해 IMAGE-01과 같은 메타데이터를 반환합니다.
+
+## IMAGE-03 이미지 콘텐츠 조회
+
+`GET /api/v1/images/:imageId/content`
+
+- 인증 사용자 소유 이미지의 바이트를 원본 MIME 타입으로 반환합니다.
+- `Cache-Control: private, no-store`를 사용합니다.
+- private 저장소의 실제 URL은 노출하지 않습니다.
+
+## IMAGE-04 이미지 삭제
+
+`DELETE /api/v1/images/:imageId`
+
+삭제 상태는 다음 순서로 전이합니다.
+
+```text
+ACTIVE 또는 DELETE_FAILED
+  -> DELETE_PENDING
+  -> 실제 파일 삭제
+  -> DELETED
 ```
 
-### 예외처리
+파일 삭제가 실패하면 `DELETE_FAILED`로 기록하고 즉시 조회를 차단합니다. 같은 DELETE 요청으로 재시도할 수 있습니다.
 
-- 이미지 누락 시: `400 / IMAGE4001`
-- `imageType` 누락 또는 허용되지 않은 값이면: `400 / IMAGE4002`
-- multipart 요청 형식이 잘못됐으면: `400 / IMAGE4003`
-- 이미지가 10MB를 초과하면: `413 / IMAGE4131`
-- 지원하지 않는 MIME 형식이면: `415 / IMAGE4151`
+## 상태와 오류 코드
 
-### 프론트 연동 체크리스트
+| HTTP | 코드 | 의미 |
+| --- | --- | --- |
+| 400 | `IMAGE4001` | 이미지 누락 |
+| 400 | `IMAGE4002` | imageType 누락 또는 허용되지 않은 값 |
+| 400 | `IMAGE4003` | 잘못된 multipart 요청 |
+| 400 | `IMAGE4004` | 잘못된 이미지 ID |
+| 401 | `AUTH4011` | 인증 사용자 컨텍스트 없음 |
+| 404 | `IMAGE4041` | 소유 이미지가 아니거나 존재하지 않음 |
+| 409 | `IMAGE4091` | 이미지 상태상 현재 삭제 불가 |
+| 413 | `IMAGE4131` | 10MB 초과 |
+| 415 | `IMAGE4151` | 지원하지 않는 형식 또는 MIME/시그니처 불일치 |
+| 503 | `IMAGE5031` | 메타데이터 저장 실패 |
+| 503 | `IMAGE5032` | 파일 저장 또는 상태 확정 실패 |
+| 503 | `IMAGE5033` | 파일 읽기 실패 |
+| 503 | `IMAGE5034` | 파일 삭제 실패 |
+| 503 | `IMAGE5035` | 이미지 메타데이터 조회·상태 저장 실패 |
 
-- form-data 파일 필드명은 `image`를 사용합니다.
-- `imageType`은 위 세 값 중 하나를 전달합니다. 서버는 대소문자를 정규화하지만 명세 값은 대문자를 기준으로 합니다.
-- 성공 여부는 HTTP 상태와 `isSuccess`를 함께 확인합니다.
-- 오류 발생 시 `code`를 기준으로 사용자 안내를 분기합니다.
-- M3 전까지 성공 응답은 실제 저장 완료를 의미하지 않습니다.
+## 배포 전 조건
+
+- BE1 JWT 검증 미들웨어가 `req.auth.userId: number`를 설정해야 합니다.
+- 개발 기본 로컬 저장소는 단일 인스턴스용입니다. 다중 인스턴스 배포에서는 S3/R2 호환 어댑터가 필요합니다.
+- 참조 중인 프로필·옷장·코디 결과의 삭제 정책은 각 도메인 API에서 참조 해제 또는 교체 후 호출하도록 확정해야 합니다.
+- 서버 시작 시 15분 이상 `UPLOADING` 또는 `DELETE_PENDING`인 레코드를 정리해 중단된 상태를 복구합니다.

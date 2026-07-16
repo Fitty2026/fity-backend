@@ -2,10 +2,13 @@
   "name": "fity-backend",
   "version": "1.0.0",
   "description": "FITY Backend",
-  "main": "index.js",
+  "main": "src/server.js",
   "scripts": {
-    "test": "node --test",
-    "dev": "nodemon src/server.js"
+    "test": "node --test test/*.test.js",
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate"
   },
   "repository": {
     "type": "git",
@@ -20,15 +23,20 @@
   },
   "homepage": "https://github.com/Fitty2026/fity-backend#readme",
   "dependencies": {
+    "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "multer": "^2.2.0"
+    "multer": "^2.2.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
     "prisma": "^7.8.0",
     "supertest": "^7.2.2"
+  },
+  "overrides": {
+    "@hono/node-server": "1.19.13"
   }
 }
