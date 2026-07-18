@@ -34,6 +34,7 @@ app.get('/health', async (req, res, next) => {
 
 app.use(errorHandler); //에러핸들러
 
+
 app.listen(port, () => {
     console.log(`Fitty Server is running on port ${port}`);
 });

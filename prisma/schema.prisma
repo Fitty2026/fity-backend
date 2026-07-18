@@ -7,13 +7,77 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 예시 user테이블. 나중에 ERD보면서 수정하면 됩니다.
+//User, ImageAsset부분은 다른파트 분들 코드 사용해서 합칠 예정
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id          Int          @id @default(autoincrement())
+  closetItems ClosetItem[]
+  consentLogs    ConsentLog[]
+  importSessions ImportSession[]
+  
   @@map("users")
+}
+
+model ImageAsset {
+  id          Int          @id @default(autoincrement())
+  imageUrl    String
+  closetItems ClosetItem[]
+  
+  @@map("image_assets")
+}
+
+//BE3
+model ClosetItem {
+  id           Int        @id @default(autoincrement())
+  userId       Int
+  imageId      Int
+  name String
+  size String
+  category     String     // TOP, BOTTOM
+  importType   String     // 무신사, 에이블리, 26CM
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user         User       @relation(fields: [userId], references: [id])
+  imageAsset   ImageAsset @relation(fields: [imageId], references: [id])
+  tags         ItemTag[]
+
+  @@map("closet_items")
+}
+
+model ItemTag {
+  id           Int        @id @default(autoincrement())
+  closetItemId Int
+  tagName      String
+  closetItem   ClosetItem @relation(fields: [closetItemId], references: [id], onDelete: Cascade)
+
+  @@map("item_tags")
+}
+
+model ShoppingPlatform {
+  id              Int               @id @default(autoincrement())
+  platformName    String            @unique
+  importSessions  ImportSession[]
+  @@map("shopping_platforms")
+}
+
+model ImportSession {
+  id           Int              @id @default(autoincrement())
+  userId       Int
+  platformId   Int
+  status       String
+  createdAt    DateTime         @default(now())
+
+  user         User             @relation(fields: [userId], references: [id])
+  platform     ShoppingPlatform @relation(fields: [platformId], references: [id])
+  @@map("import_sessions")
+}
+
+model ConsentLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  target      String
+  isAgreed    Boolean
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+  @@map("consent_logs")
 }
