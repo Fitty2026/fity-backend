@@ -63,7 +63,8 @@ export const requestItemRegistration = async (userId, category, importType, imag
             name: name,
             size: size,
             category: category,
-            importType: importType
+            importType: importType,
+            imageId: imageId
         }
     });
     return {
@@ -102,6 +103,7 @@ export const requestItemList = async (userId, category, keyword) => {
         size: item.size,
         category: item.category,
         import_type: item.importType,
+        tags: item.tags.map(t => t.tagName),
         image_url: item.imageAsset?.imageUrl || null 
     }));
 };

@@ -10,10 +10,14 @@ generator client {
 //User, ImageAsset부분은 다른파트 분들 코드 사용해서 합칠 예정
 model User {
   id          Int          @id @default(autoincrement())
+  email     String   @unique
+  name      String?
   closetItems ClosetItem[]
   consentLogs    ConsentLog[]
   importSessions ImportSession[]
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("users")
 }
 
