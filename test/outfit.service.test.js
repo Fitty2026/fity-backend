@@ -125,4 +125,20 @@ describe("BE4 outfit service", () => {
         assert.ok(Array.isArray(savedOutfit.items));
         assert.ok(Array.isArray(savedOutfit.styleTags));
     });
+
+    it("returns a fallback generated image when AI generation is unavailable", async () => {
+        const createdJob = await createGenerationJob(1, {
+            bodyProfileId: 1,
+            closetItemIds: [3, 7],
+            styleTagIds: [1],
+            aiRequestMode: "FALLBACK"
+        });
+        const completedJob = await getGenerationJob(1, createdJob.jobId);
+
+        assert.equal(completedJob.status, "completed");
+        assert.equal(completedJob.generatedImage.provider, "fallback");
+        assert.equal(completedJob.generatedImage.fallbackUsed, true);
+        assert.ok(completedJob.generatedImage.failureReason);
+        assert.deepEqual(completedJob.generatedImage.recommendedClosetItemIds, [3, 7]);
+    });
 });

@@ -1,3 +1,5 @@
+import { normalizeAiRequestMode, requestAiOutfitGeneration } from "./outfit-ai.service.js";
+
 const MAX_PAGE_SIZE = 50;
 
 const bodyProfiles = [
@@ -23,6 +25,9 @@ const outfitResults = [
         userId: 1,
         generatedImageUrl: "https://fitty-bucket.s3.amazonaws.com/outfits/outfit_10.png",
         fallbackUsed: false,
+        provider: "fitty-ai",
+        failureReason: null,
+        recommendedClosetItemIds: [3, 7, 12],
         closetItemIds: [3, 7, 12]
     }
 ];
@@ -35,6 +40,7 @@ const outfitJobs = [
         bodyProfileId: 1,
         closetItemIds: [3, 7, 12],
         styleTagIds: [1, 3],
+        aiRequestMode: "SUCCESS",
         outfitResultId: 10,
         createdAt: "2026-07-18T20:30:00.000Z",
         completedAt: "2026-07-18T20:31:30.000Z"
@@ -109,16 +115,26 @@ const assertGenerationOwnership = ({ userId, bodyProfileId, closetItemIds, style
     };
 };
 
-const completeJobIfReady = (job) => {
+const completeJobIfReady = async (job) => {
     if (job.status !== "queued") {
         return job;
     }
 
+    job.status = "processing";
+    const aiResult = await requestAiOutfitGeneration({
+        jobId: job.jobId,
+        closetItemIds: job.closetItemIds,
+        aiRequestMode: job.aiRequestMode
+    });
+
     const outfitResult = {
         outfitResultId: nextOutfitResultId++,
         userId: job.userId,
-        generatedImageUrl: `https://fitty-bucket.s3.amazonaws.com/outfits/outfit_${job.jobId}.png`,
-        fallbackUsed: false,
+        generatedImageUrl: aiResult.generatedImageUrl,
+        fallbackUsed: aiResult.fallbackUsed,
+        provider: aiResult.provider,
+        failureReason: aiResult.failureReason,
+        recommendedClosetItemIds: aiResult.recommendedClosetItemIds,
         closetItemIds: job.closetItemIds
     };
 
@@ -209,7 +225,7 @@ const parsePagination = ({ page = 1, size = 10 }) => {
     return { currentPage, pageSize };
 };
 
-export const createGenerationJob = async (userId, { bodyProfileId, closetItemIds, styleTagIds }) => {
+export const createGenerationJob = async (userId, { bodyProfileId, closetItemIds, styleTagIds, aiRequestMode }) => {
     const normalizedInput = assertGenerationOwnership({
         userId,
         bodyProfileId,
@@ -225,6 +241,7 @@ export const createGenerationJob = async (userId, { bodyProfileId, closetItemIds
         bodyProfileId: Number(bodyProfileId),
         closetItemIds: normalizedInput.closetItemIds,
         styleTagIds: normalizedInput.styleTagIds,
+        aiRequestMode: normalizeAiRequestMode(aiRequestMode),
         outfitResultId: null,
         createdAt: now,
         completedAt: null
@@ -250,7 +267,7 @@ export const getGenerationJob = async (userId, jobId) => {
         throw createHttpError(403, "FORBIDDEN403", "Outfit generation job ownership check failed.");
     }
 
-    const completedJob = completeJobIfReady(job);
+    const completedJob = await completeJobIfReady(job);
     const result = completedJob.outfitResultId
         ? getOwnedOutfitResult(userId, completedJob.outfitResultId)
         : null;
@@ -263,7 +280,10 @@ export const getGenerationJob = async (userId, jobId) => {
             ? {
                 outfitResultId: result.outfitResultId,
                 imageUrl: result.generatedImageUrl,
-                fallbackUsed: result.fallbackUsed
+                provider: result.provider,
+                fallbackUsed: result.fallbackUsed,
+                failureReason: result.failureReason,
+                recommendedClosetItemIds: result.recommendedClosetItemIds
             }
             : null,
         createdAt: completedJob.createdAt,
