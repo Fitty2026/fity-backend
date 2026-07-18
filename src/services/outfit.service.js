@@ -144,6 +144,54 @@ const getOwnedOutfitResult = (userId, outfitResultId) => {
     return result;
 };
 
+const getClosetItemSummary = (closetItemId) => {
+    const item = closetItems.find((closetItem) => closetItem.closetItemId === closetItemId);
+
+    return item
+        ? {
+            id: item.closetItemId,
+            closetItemId: item.closetItemId,
+            name: item.name,
+            imageUrl: item.imageUrl
+        }
+        : null;
+};
+
+const getStyleTagSummary = (styleTagId) => {
+    const tag = styleTags.find((styleTag) => styleTag.styleTagId === styleTagId);
+
+    return tag
+        ? {
+            id: tag.styleTagId,
+            styleTagId: tag.styleTagId,
+            name: tag.name
+        }
+        : null;
+};
+
+const toSavedOutfitResponse = (savedOutfit) => {
+    const sourceResult = outfitResults.find((item) => item.outfitResultId === savedOutfit.outfitResultId);
+    const sourceJob = outfitJobs.find((item) => item.outfitResultId === savedOutfit.outfitResultId);
+
+    return {
+        id: savedOutfit.savedOutfitId,
+        savedOutfitId: savedOutfit.savedOutfitId,
+        outfitResultId: savedOutfit.outfitResultId,
+        name: savedOutfit.name,
+        imageUrl: savedOutfit.imageUrl,
+        thumbnailUrl: savedOutfit.thumbnailUrl,
+        items: (sourceResult?.closetItemIds || [])
+            .map(getClosetItemSummary)
+            .filter(Boolean),
+        styleTags: (sourceJob?.styleTagIds || [])
+            .map(getStyleTagSummary)
+            .filter(Boolean),
+        createdAt: savedOutfit.savedAt,
+        savedAt: savedOutfit.savedAt,
+        isSaved: true
+    };
+};
+
 const parsePagination = ({ page = 1, size = 10 }) => {
     const currentPage = Number(page);
     const pageSize = Number(size);
@@ -250,12 +298,7 @@ export const saveOutfit = async (userId, { outfitResultId, name }) => {
 
     savedOutfits.push(savedOutfit);
 
-    return {
-        savedOutfitId: savedOutfit.savedOutfitId,
-        outfitResultId: savedOutfit.outfitResultId,
-        name: savedOutfit.name,
-        savedAt: savedOutfit.savedAt
-    };
+    return toSavedOutfitResponse(savedOutfit);
 };
 
 export const getSavedOutfits = async (userId, pagination) => {
@@ -265,14 +308,7 @@ export const getSavedOutfits = async (userId, pagination) => {
     const pagedItems = ownedSavedOutfits.slice(startIndex, startIndex + pageSize);
 
     return {
-        items: pagedItems.map(({ savedOutfitId, outfitResultId, name, imageUrl, thumbnailUrl, savedAt }) => ({
-            savedOutfitId,
-            outfitResultId,
-            name,
-            imageUrl,
-            thumbnailUrl,
-            savedAt
-        })),
+        items: pagedItems.map(toSavedOutfitResponse),
         pagination: {
             page: currentPage,
             size: pageSize,

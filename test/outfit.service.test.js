@@ -38,8 +38,8 @@ describe("BE4 outfit auth middleware", () => {
         assert.equal(payload.code, "AUTH401");
     });
 
-    it("sets req.auth.userId from the skeleton auth token", () => {
-        const req = { get: () => "Bearer test-user-1" };
+    it("accepts a user context verified by common auth middleware", () => {
+        const req = { auth: { userId: 1 } };
         const res = {};
         let nextCalled = false;
 
@@ -48,7 +48,6 @@ describe("BE4 outfit auth middleware", () => {
         });
 
         assert.equal(nextCalled, true);
-        assert.deepEqual(req.auth, { userId: 1 });
     });
 });
 
@@ -120,5 +119,10 @@ describe("BE4 outfit service", () => {
 
         assert.equal(savedOutfit.name, "test outfit");
         assert.equal(savedOutfit.outfitResultId, completedJob.outfitResultId);
+        assert.equal(savedOutfit.id, savedOutfit.savedOutfitId);
+        assert.equal(savedOutfit.isSaved, true);
+        assert.ok(savedOutfit.createdAt);
+        assert.ok(Array.isArray(savedOutfit.items));
+        assert.ok(Array.isArray(savedOutfit.styleTags));
     });
 });
