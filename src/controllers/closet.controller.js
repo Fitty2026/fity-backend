@@ -1,4 +1,4 @@
-import { requestSyncService, requestItemRegistration, requestItemList, requestItemUpdate, requestItemDelete } from '../services/closet.service.js'
+import { requestSyncService, requestItemRegistration, requestItemList, requestItemDetail, requestItemUpdate, requestItemDelete } from '../services/closet.service.js'
 
 //CLOSET-01 쇼핑몰연동
 export const requestSync = async (req, res) => {
@@ -71,6 +71,35 @@ export const getItems = async (req, res) => {
     } catch (error) {
         console.error("아이템 목록 조회 컨트롤러 에러:", error);
         res.status(500).json({ isSuccess: false, code: "SERVER500", message: "서버 내부 에러" });
+    }
+};
+
+//CLOSET-04 아이템 상세조회
+export const getItemDetail = async (req, res) => {
+    try {
+        const itemId = parseInt(req.params.itemId, 10);
+
+        if (!itemId) {
+            return res.status(400).json({ isSuccess: false, code: "BAD400", message: "아이템 ID가 필요합니다." });
+        }
+
+        const result = await requestItemDetail(userId, itemId);
+
+        res.status(200).json({
+            isSuccess: true,
+            code: "COMMON200",
+            message: "옷장 아이템 상세 조회에 성공했습니다.",
+            result: result
+        });
+    } catch (error) {
+        if (error.message === 'ITEM_NOT_FOUND') {
+            return res.status(404).json({ isSuccess: false, code: "NOT404", message: "존재하지 않는 아이템입니다." });
+        }
+        if (error.message === 'FORBIDDEN_NOT_YOUR_ITEM') {
+            return res.status(403).json({ isSuccess: false, code: "FORBIDDEN403", message: "해당 아이템에 접근할 권한이 없습니다." });
+        }
+        console.error("아이템 상세 조회 컨트롤러 에러:", error);
+        res.status(500).json({ isSuccess: false, code: "SERVER500", message: "서버 에러" });
     }
 };
 

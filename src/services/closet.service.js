@@ -108,6 +108,40 @@ export const requestItemList = async (userId, category, keyword) => {
     }));
 };
 
+//CLOSET-04 아이템 상세조회
+export const requestItemDetail = async (userId, itemId) => {
+    const item = await prisma.closetItem.findUnique({
+        where: { id: itemId },
+        include: {
+            imageAsset: true,
+            tags: true
+        }
+    });
+
+    //아이템 없는 경우
+    if (!item) {
+        throw new Error('ITEM_NOT_FOUND');
+    }
+
+    //본인 아이템이 아닌 경우
+    if (item.userId !== userId) {
+        throw new Error('FORBIDDEN_NOT_YOUR_ITEM');
+    }
+
+    return {
+        item_id: item.id,
+        name: item.name,
+        size: item.size,
+        category: item.category,
+        import_type: item.importType,
+        tags: item.tags.map(t => t.tagName), // 배열 형태로 예쁘게 변환
+        image_url: item.imageAsset?.imageUrl || null,
+        created_at: item.createdAt,
+        updated_at: item.updatedAt
+    };
+};
+
+//CLOSET-05 아이템 정보 및 태그 수정
 export const requestItemUpdate = async (itemId, name, size, category, importType, tags) => {
     
     const updateData = {
