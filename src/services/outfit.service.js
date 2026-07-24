@@ -1,7 +1,7 @@
 const httpError = (status, code, message) => Object.assign(new Error(message), { status, code });
 const normalizeIds = (value, field, { required = false } = {}) => {
     if (value == null && !required) return [];
-    if (!Array.isArray(value) || (required && value.length === 0) || !value.every(Number.isSafeInteger)) throw httpError(400, 'REQUEST400', `${field} must be an array of positive integer IDs.`);
+    if (!Array.isArray(value) || (required && value.length === 0) || !value.every((id) => Number.isSafeInteger(id) && id > 0)) throw httpError(400, 'REQUEST400', `${field} must be an array of positive integer IDs.`);
     return [...new Set(value)];
 };
 const toJob = (job) => ({ jobId: job.id, status: job.status.toLowerCase(), outfitResultId: job.result?.id ?? null, generatedImage: job.result ? { outfitResultId: job.result.id, imageUrl: job.result.generatedImageUrl, provider: job.result.provider, fallbackUsed: job.result.fallbackUsed, recommendedClosetItemIds: job.result.recommendedClosetItemIds } : null, failure: job.status === 'FAILED' ? { code: job.failureCode, reason: job.failureReason } : null, createdAt: job.createdAt, completedAt: job.completedAt });
@@ -14,6 +14,11 @@ export class OutfitService {
         const styleTagIds = normalizeIds(input.styleTagIds, 'styleTagIds');
         const bodyProfileId = input.bodyProfileId == null ? null : Number(input.bodyProfileId);
         if (bodyProfileId !== null && (!Number.isSafeInteger(bodyProfileId) || bodyProfileId <= 0)) throw httpError(400, 'REQUEST400', 'bodyProfileId must be a positive integer.');
+        const ownedItemIds = await this.repository.findOwnedClosetItemIds(userId, closetItemIds);
+        if (ownedItemIds.length !== closetItemIds.length) throw httpError(403, 'FORBIDDEN403', 'Closet item ownership check failed.');
+        if (bodyProfileId !== null && !await this.repository.findOwnedActiveBodyProfile(userId, bodyProfileId)) {
+            throw httpError(404, 'NOT_FOUND404', 'Body profile was not found.');
+        }
         const job = await this.repository.createJob({ userId, bodyProfileId, closetItemIds, styleTagIds });
         return { jobId: job.id, status: 'queued', createdAt: job.createdAt };
     }
@@ -25,7 +30,12 @@ export class OutfitService {
     async processGenerationJob(rawId) {
         const job = await this.repository.claimQueuedJob(Number(rawId));
         if (!job) return null;
-        try { await this.repository.completeJob({ job, aiResult: await this.aiAdapter.generate({ jobId: job.id, userId: job.userId, bodyProfileId: job.bodyProfileId, closetItemIds: job.closetItemIds, styleTagIds: job.styleTagIds }) }); }
+        try {
+            const aiResult = await this.aiAdapter.generate({ jobId: job.id, userId: job.userId, bodyProfileId: job.bodyProfileId, closetItemIds: job.closetItemIds, styleTagIds: job.styleTagIds });
+            const ownedRecommendationIds = await this.repository.findOwnedClosetItemIds(job.userId, aiResult.recommendedClosetItemIds);
+            if (ownedRecommendationIds.length !== aiResult.recommendedClosetItemIds.length) throw Object.assign(new Error('AI recommended an inaccessible closet item.'), { code: 'AI_INVALID_RECOMMENDATION' });
+            await this.repository.completeJob({ job, aiResult });
+        }
         catch (error) { await this.repository.failJob({ id: job.id, code: error.code || 'AI_GENERATION_FAILED', reason: error.message || 'AI generation failed.' }); }
         return this.repository.findJob(job.userId, job.id);
     }

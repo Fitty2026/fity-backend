@@ -13,6 +13,20 @@ export class OutfitRepository {
         return this.prisma.outfitGenerationJob.create({ data: { userId, bodyProfileId, closetItemIds, styleTagIds } });
     }
 
+    async findOwnedClosetItemIds(userId, closetItemIds) {
+        const items = await this.prisma.closetItem.findMany({
+            where: { userId, id: { in: closetItemIds } }, select: { id: true }
+        });
+        return items.map((item) => item.id);
+    }
+
+    findOwnedActiveBodyProfile(userId, imageId) {
+        // BodyProfile is not a standalone model yet. Until it is, only a user's active BODY_PROFILE asset is valid.
+        return this.prisma.imageAsset.findFirst({
+            where: { id: imageId, userId, imageType: 'BODY_PROFILE', status: 'ACTIVE', deletedAt: null }, select: { id: true }
+        });
+    }
+
     findJob(userId, id) {
         return this.prisma.outfitGenerationJob.findFirst({ where: { id, userId }, include: { result: true } });
     }
