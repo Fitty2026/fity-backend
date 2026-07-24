@@ -13,6 +13,7 @@ import { createIndexRouter } from './routes/index.js';
 import { AuthService } from './services/auth.service.js';
 import { ImageService } from './services/image.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
+import { ClosetService } from './services/closet.service.js';
 
 const createDefaultImageService = () => {
     const repository = new ImageRepository(getPrisma);
@@ -30,19 +31,23 @@ const defaultHealthCheck = async () => {
     await getPrisma().$queryRaw`SELECT 1`;
 };
 
+const createDefaultClosetService = () => new ClosetService({ getPrisma });
+
 export const createApp = ({
     imageService = createDefaultImageService(),
     authService = createDefaultAuthService(),
+    closetService = createDefaultClosetService(),
     authenticate = authenticateJwt,
     healthCheck = defaultHealthCheck
 } = {}) => {
     const app = express();
     app.locals.imageService = imageService;
     app.locals.authService = authService;
+    app.locals.closetService = closetService;
 
     app.use(cors());
     app.use(express.json());
-    app.use('/api', createIndexRouter({ imageService, authService, authenticate }));
+    app.use('/api', createIndexRouter({ imageService, authService, closetService, authenticate }));
 
     app.get('/health', async (req, res, next) => {
         try {

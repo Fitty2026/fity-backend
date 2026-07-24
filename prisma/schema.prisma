@@ -30,13 +30,16 @@ enum ImageAssetStatus {
 
 // 예시 user테이블. 나중에 ERD보면서 수정하면 됩니다.
 model User {
-  id           Int          @id @default(autoincrement())
-  email        String       @unique
-  passwordHash String?      @map("password_hash") @db.VarChar(60)
-  name         String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  images       ImageAsset[]
+  id             Int             @id @default(autoincrement())
+  email          String          @unique
+  passwordHash   String?         @map("password_hash") @db.VarChar(60)
+  name           String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  images         ImageAsset[]
+  closetItems ClosetItem[]
+  consentLogs ConsentLog[]
+  importSessions ImportSession[]
 
   @@map("users")
 }
@@ -57,7 +60,70 @@ model ImageAsset {
   updatedAt        DateTime         @updatedAt @map("updated_at")
   deletedAt        DateTime?        @map("deleted_at")
   user             User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  closetItems      ClosetItem[]
 
   @@index([userId, status])
   @@map("image_assets")
+}
+
+model ClosetItem {
+  id         Int        @id @default(autoincrement())
+  userId     Int        @map("user_id")
+  imageId    Int        @map("image_id")
+  name       String     @db.VarChar(120)
+  size       String     @db.VarChar(60)
+  category   String     @db.VarChar(60)
+  importType String     @map("import_type") @db.VarChar(60)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+  user       User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  imageAsset ImageAsset @relation(fields: [imageId], references: [id], onDelete: Restrict)
+  tags       ItemTag[]
+
+  @@index([userId, createdAt])
+  @@index([imageId])
+  @@map("closet_items")
+}
+
+model ItemTag {
+  id           Int        @id @default(autoincrement())
+  closetItemId Int        @map("closet_item_id")
+  tagName      String     @map("tag_name") @db.VarChar(60)
+  closetItem   ClosetItem @relation(fields: [closetItemId], references: [id], onDelete: Cascade)
+
+  @@unique([closetItemId, tagName])
+  @@map("item_tags")
+}
+
+model ShoppingPlatform {
+  id             Int             @id @default(autoincrement())
+  platformName   String          @unique @map("platform_name") @db.VarChar(60)
+  importSessions ImportSession[]
+
+  @@map("shopping_platforms")
+}
+
+model ImportSession {
+  id         Int              @id @default(autoincrement())
+  userId     Int              @map("user_id")
+  platformId Int              @map("platform_id")
+  status     String           @db.VarChar(30)
+  createdAt  DateTime         @default(now()) @map("created_at")
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  platform   ShoppingPlatform @relation(fields: [platformId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@map("import_sessions")
+}
+
+model ConsentLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  target    String   @db.VarChar(60)
+  isAgreed  Boolean  @map("is_agreed")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@map("consent_logs")
 }
