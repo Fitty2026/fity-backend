@@ -7,10 +7,10 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
 class MemoryOutfitRepository {
-    constructor() { this.jobs = []; this.results = []; this.saved = []; this.next = 1; this.ownedClosetItems = new Map([[1, new Set([4])]]); }
+    constructor() { this.jobs = []; this.results = []; this.saved = []; this.next = 1; this.ownedClosetItems = new Map([[1, new Set([4])]]); this.ownedBodyProfiles = new Map([[1, new Set([7])]]); }
     async createJob(data) { const job = { id: this.next++, status: 'QUEUED', createdAt: new Date(), completedAt: null, failureCode: null, failureReason: null, result: null, ...data }; this.jobs.push(job); return job; }
     async findOwnedClosetItemIds(userId, ids) { return ids.filter((id) => this.ownedClosetItems.get(userId)?.has(id)); }
-    async findOwnedActiveBodyProfile() { return null; }
+    async findOwnedBodyProfile(userId, id) { return this.ownedBodyProfiles.get(userId)?.has(id) ? { id } : null; }
     async findJob(userId, id) { const job = this.jobs.find((item) => item.id === id && item.userId === userId); return job && { ...job, result: this.results.find((r) => r.generationJobId === job.id) || null }; }
     async claimQueuedJob(id) { const job = this.jobs.find((item) => item.id === id && item.status === 'QUEUED'); if (!job) return null; job.status = 'PROCESSING'; job.startedAt = new Date(); return { ...job }; }
     async completeJob({ job, aiResult }) { const result = { id: this.next++, userId: job.userId, generationJobId: job.id, createdAt: new Date(), ...aiResult }; this.results.push(result); const target = this.jobs.find((item) => item.id === job.id); target.status = 'COMPLETED'; target.completedAt = new Date(); return result; }
@@ -34,6 +34,10 @@ describe('OutfitService', () => {
     it('rejects a generation request that includes another user\'s closet item', async () => {
         const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
         await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4, 99] }), { code: 'FORBIDDEN403' });
+    });
+    it('rejects a body profile that is not owned by the authenticated user', async () => {
+        const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
+        await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], bodyProfileId: 8 }), { code: 'NOT_FOUND404' });
     });
     it('records adapter failures as a terminal failed state', async () => {
         const repository = new MemoryOutfitRepository();

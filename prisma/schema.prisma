@@ -60,7 +60,6 @@ model OutfitGenerationJob {
   id            Int                    @id @default(autoincrement())
   userId        Int                    @map("user_id")
   status        OutfitGenerationStatus @default(QUEUED)
-  // Until BodyProfile is normalized, this references an owned active BODY_PROFILE ImageAsset by application validation.
   bodyProfileId Int?                   @map("body_profile_id")
   closetItemIds Json                   @map("closet_item_ids")
   styleTagIds   Json                   @map("style_tag_ids")

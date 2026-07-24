@@ -16,7 +16,7 @@ export class OutfitService {
         if (bodyProfileId !== null && (!Number.isSafeInteger(bodyProfileId) || bodyProfileId <= 0)) throw httpError(400, 'REQUEST400', 'bodyProfileId must be a positive integer.');
         const ownedItemIds = await this.repository.findOwnedClosetItemIds(userId, closetItemIds);
         if (ownedItemIds.length !== closetItemIds.length) throw httpError(403, 'FORBIDDEN403', 'Closet item ownership check failed.');
-        if (bodyProfileId !== null && !await this.repository.findOwnedActiveBodyProfile(userId, bodyProfileId)) {
+        if (bodyProfileId !== null && !await this.repository.findOwnedBodyProfile(userId, bodyProfileId)) {
             throw httpError(404, 'NOT_FOUND404', 'Body profile was not found.');
         }
         const job = await this.repository.createJob({ userId, bodyProfileId, closetItemIds, styleTagIds });
