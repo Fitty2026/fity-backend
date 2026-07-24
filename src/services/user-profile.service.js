@@ -1,5 +1,5 @@
 const problem = (status, code, message) => Object.assign(new Error(message), { status, code });
-const USER_FIELDS = new Set(['name', 'styleTags']);
+const USER_FIELDS = new Set(['name']);
 const BODY_FIELDS = new Set(['heightCm', 'weightKg', 'bodyType']);
 
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -10,6 +10,8 @@ const publicUser = (user) => ({
     email: user.email,
     name: user.name,
     styleTags: user.styleTags,
+    styleTagIds: (user.stylePreferences || []).map((preference) => preference.styleTagId),
+    styles: (user.stylePreferences || []).map((preference) => preference.styleTag),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
 });
@@ -23,15 +25,6 @@ const publicBodyProfile = (profile) => ({
     updatedAt: profile.updatedAt
 });
 
-const validateStyleTags = (value) => {
-    if (!Array.isArray(value) || value.length > 10 || value.some((tag) => typeof tag !== 'string' || !tag.trim() || tag.trim().length > 60)) {
-        throw problem(400, 'USER4003', 'styleTags는 최대 10개의 60자 이하 문자열 배열이어야 합니다.');
-    }
-    const tags = value.map((tag) => tag.trim());
-    if (new Set(tags).size !== tags.length) throw problem(400, 'USER4003', 'styleTags에 중복된 값이 있습니다.');
-    return tags;
-};
-
 const userUpdateData = (payload) => {
     const keys = Object.keys(payload).filter((key) => key !== 'userId');
     if (keys.length === 0 || keys.some((key) => !USER_FIELDS.has(key))) {
@@ -44,8 +37,22 @@ const userUpdateData = (payload) => {
         }
         data.name = payload.name?.trim() || null;
     }
-    if (own(payload, 'styleTags')) data.styleTags = validateStyleTags(payload.styleTags);
     return data;
+};
+
+const onboardingStyleIds = (payload) => {
+    const keys = Object.keys(payload).filter((key) => key !== 'userId');
+    if (keys.length !== 1 || keys[0] !== 'styleTagIds') {
+        throw problem(400, 'USER4003', 'styleTagIds만 전달해야 합니다.');
+    }
+
+    const ids = payload.styleTagIds;
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 6
+        || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)
+        || new Set(ids).size !== ids.length) {
+        throw problem(400, 'USER4003', 'styleTagIds는 1~6개의 중복 없는 양의 정수 ID 배열이어야 합니다.');
+    }
+    return ids;
 };
 
 const bodyProfileData = (payload) => {
@@ -82,18 +89,65 @@ export class UserProfileService {
     get client() { return this.prisma || this.getPrisma(); }
 
     async getUser(userId) {
-        const user = await this.client.user.findUnique({ where: { id: userId } });
+        const user = await this.client.user.findUnique({
+            where: { id: userId },
+            include: {
+                stylePreferences: {
+                    orderBy: { styleTagId: 'asc' },
+                    include: {
+                        styleTag: {
+                            select: { id: true, code: true, name: true, displayOrder: true }
+                        }
+                    }
+                }
+            }
+        });
         if (!user) throw problem(404, 'USER4041', '존재하지 않는 사용자입니다.');
         return publicUser(user);
     }
 
     async updateUser(userId, payload) {
         try {
-            return publicUser(await this.client.user.update({ where: { id: userId }, data: userUpdateData(payload) }));
+            await this.client.user.update({ where: { id: userId }, data: userUpdateData(payload) });
+            return this.getUser(userId);
         } catch (error) {
             if (error?.code === 'P2025') throw problem(404, 'USER4041', '존재하지 않는 사용자입니다.');
             throw error;
         }
+    }
+
+    listStyleTags() {
+        return this.client.styleTag.findMany({
+            where: { isActive: true },
+            orderBy: { displayOrder: 'asc' },
+            select: { id: true, code: true, name: true, displayOrder: true }
+        });
+    }
+
+    async saveOnboardingStyles(userId, payload) {
+        const styleTagIds = onboardingStyleIds(payload);
+        const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
+        if (!user) throw problem(404, 'USER4041', '존재하지 않는 사용자입니다.');
+
+        return this.client.$transaction(async (tx) => {
+            const activeTags = await tx.styleTag.findMany({
+                where: { id: { in: styleTagIds }, isActive: true },
+                select: { id: true, code: true, name: true, displayOrder: true }
+            });
+            if (activeTags.length !== styleTagIds.length) {
+                throw problem(400, 'USER4003', '존재하지 않거나 비활성화된 styleTagId가 포함되어 있습니다.');
+            }
+
+            const tagById = new Map(activeTags.map((tag) => [tag.id, tag]));
+            const styles = styleTagIds.map((id) => tagById.get(id));
+
+            await tx.userStylePreference.deleteMany({ where: { userId } });
+            await tx.userStylePreference.createMany({
+                data: styleTagIds.map((styleTagId) => ({ userId, styleTagId }))
+            });
+
+            return { userId, styleTagIds, styles };
+        });
     }
 
     async getBodyProfile(userId) {

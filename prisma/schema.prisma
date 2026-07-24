@@ -53,8 +53,34 @@ model User {
   outfitResults OutfitResult[]
   savedOutfits SavedOutfit[]
   bodyProfile BodyProfile?
+  stylePreferences UserStylePreference[]
 
   @@map("users")
+}
+
+model StyleTag {
+  id           Int                   @id
+  code         String                @unique @db.VarChar(30)
+  name         String                @unique @db.VarChar(50)
+  displayOrder Int                   @unique @map("display_order")
+  isActive     Boolean               @default(true) @map("is_active")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+  preferences  UserStylePreference[]
+
+  @@map("style_tags")
+}
+
+model UserStylePreference {
+  userId     Int      @map("user_id")
+  styleTagId Int      @map("style_tag_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  styleTag   StyleTag @relation(fields: [styleTagId], references: [id], onDelete: Restrict)
+
+  @@id([userId, styleTagId])
+  @@index([styleTagId])
+  @@map("user_style_preferences")
 }
 
 model OutfitGenerationJob {

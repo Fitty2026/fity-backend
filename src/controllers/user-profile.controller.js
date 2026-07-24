@@ -11,8 +11,12 @@ export const createUserProfileController = (userProfileService) => ({
         try { return sendResponse(res, await userProfileService.updateUser(userIdOf(req), req.body || {}), '내 프로필을 수정했습니다.'); }
         catch (error) { return next(error); }
     },
+    listStyleTags: async (req, res, next) => {
+        try { return sendResponse(res, await userProfileService.listStyleTags(), '스타일 태그 목록을 조회했습니다.'); }
+        catch (error) { return next(error); }
+    },
     saveOnboardingStyles: async (req, res, next) => {
-        try { return sendResponse(res, await userProfileService.updateUser(userIdOf(req), { styleTags: req.body?.styles }), '온보딩 스타일을 저장했습니다.'); }
+        try { return sendResponse(res, await userProfileService.saveOnboardingStyles(userIdOf(req), req.body || {}), '온보딩 스타일을 저장했습니다.'); }
         catch (error) { return next(error); }
     },
     getBodyProfile: async (req, res, next) => {

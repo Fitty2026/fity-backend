@@ -39,9 +39,11 @@ git diff --check
 | GET | `/api/v1/images/:imageId` | 소유자 전용 메타데이터 조회 |
 | GET | `/api/v1/images/:imageId/content` | 소유자 전용 이미지 바이트 조회 |
 | DELETE | `/api/v1/images/:imageId` | 소유자 전용 이미지 삭제 |
+| GET | `/api/v1/style-tags` | 온보딩 스타일 태그 ID·명칭 조회 |
+| POST | `/api/v1/users/onboarding/style` | 인증 사용자의 스타일 취향 즉시 저장 |
 | GET | `/health` | 서버와 실제 DB 연결 상태 확인 |
 
-세부 계약은 [이미지 API 명세](docs/image-upload-api.md)를 참고합니다.
+세부 계약은 [이미지 API 명세](docs/image-upload-api.md), [인증 API 명세](docs/auth-api.md), [사용자·온보딩 API 명세](docs/user-profile-api.md)를 참고합니다.
 
 ## 저장소 경계
 
