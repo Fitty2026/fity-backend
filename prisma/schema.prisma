@@ -28,6 +28,13 @@ enum ImageAssetStatus {
   DELETED
 }
 
+enum OutfitGenerationStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 // 예시 user테이블. 나중에 ERD보면서 수정하면 됩니다.
 model User {
   id             Int             @id @default(autoincrement())
@@ -40,8 +47,62 @@ model User {
   closetItems ClosetItem[]
   consentLogs ConsentLog[]
   importSessions ImportSession[]
+  outfitGenerationJobs OutfitGenerationJob[]
+  outfitResults OutfitResult[]
+  savedOutfits SavedOutfit[]
 
   @@map("users")
+}
+
+model OutfitGenerationJob {
+  id            Int                    @id @default(autoincrement())
+  userId        Int                    @map("user_id")
+  status        OutfitGenerationStatus @default(QUEUED)
+  bodyProfileId Int?                   @map("body_profile_id")
+  closetItemIds Json                   @map("closet_item_ids")
+  styleTagIds   Json                   @map("style_tag_ids")
+  failureCode  String?                 @map("failure_code") @db.VarChar(80)
+  failureReason String?                @map("failure_reason") @db.VarChar(500)
+  startedAt     DateTime?              @map("started_at")
+  completedAt   DateTime?              @map("completed_at")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  result        OutfitResult?
+
+  @@index([userId, status, createdAt])
+  @@map("outfit_generation_jobs")
+}
+
+model OutfitResult {
+  id                      Int                  @id @default(autoincrement())
+  userId                  Int                  @map("user_id")
+  generationJobId         Int                  @unique @map("generation_job_id")
+  generatedImageUrl       String               @map("generated_image_url") @db.VarChar(1000)
+  provider                String               @db.VarChar(80)
+  fallbackUsed            Boolean              @default(false) @map("fallback_used")
+  recommendedClosetItemIds Json                @map("recommended_closet_item_ids")
+  createdAt               DateTime             @default(now()) @map("created_at")
+  user                    User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  generationJob           OutfitGenerationJob  @relation(fields: [generationJobId], references: [id], onDelete: Restrict)
+  savedOutfits            SavedOutfit[]
+
+  @@index([userId, createdAt])
+  @@map("outfit_results")
+}
+
+model SavedOutfit {
+  id             Int          @id @default(autoincrement())
+  userId         Int          @map("user_id")
+  outfitResultId Int          @map("outfit_result_id")
+  name           String       @db.VarChar(120)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  outfitResult   OutfitResult @relation(fields: [outfitResultId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, outfitResultId])
+  @@index([userId, createdAt])
+  @@map("saved_outfits")
 }
 
 model ImageAsset {

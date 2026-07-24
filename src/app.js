@@ -9,9 +9,12 @@ import { authenticateJwt } from './middlewares/auth-context.middleware.js';
 import { sendResponse, errorHandler } from './middlewares/response.middleware.js';
 import { AuthRepository } from './repositories/auth.repository.js';
 import { ImageRepository } from './repositories/image.repository.js';
+import { OutfitRepository } from './repositories/outfit.repository.js';
 import { createIndexRouter } from './routes/index.js';
 import { AuthService } from './services/auth.service.js';
 import { ImageService } from './services/image.service.js';
+import { OutfitService } from './services/outfit.service.js';
+import { OutfitAiAdapter } from './services/outfit-ai.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
 
@@ -32,22 +35,28 @@ const defaultHealthCheck = async () => {
 };
 
 const createDefaultClosetService = () => new ClosetService({ getPrisma });
+const createDefaultOutfitService = () => new OutfitService({
+    repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
+});
 
 export const createApp = ({
     imageService = createDefaultImageService(),
     authService = createDefaultAuthService(),
     closetService = createDefaultClosetService(),
+    outfitService = createDefaultOutfitService(),
     authenticate = authenticateJwt,
-    healthCheck = defaultHealthCheck
+    healthCheck = defaultHealthCheck,
+    internalToken = process.env.INTERNAL_WORKER_TOKEN
 } = {}) => {
     const app = express();
     app.locals.imageService = imageService;
     app.locals.authService = authService;
     app.locals.closetService = closetService;
+    app.locals.outfitService = outfitService;
 
     app.use(cors());
     app.use(express.json());
-    app.use('/api', createIndexRouter({ imageService, authService, closetService, authenticate }));
+    app.use('/api', createIndexRouter({ imageService, authService, closetService, outfitService, authenticate, internalToken }));
 
     app.get('/health', async (req, res, next) => {
         try {
