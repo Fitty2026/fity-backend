@@ -41,6 +41,7 @@ model User {
   email          String          @unique
   passwordHash   String?         @map("password_hash") @db.VarChar(60)
   name           String?
+  styleTags      Json?           @map("style_tags")
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   images         ImageAsset[]
@@ -50,6 +51,7 @@ model User {
   outfitGenerationJobs OutfitGenerationJob[]
   outfitResults OutfitResult[]
   savedOutfits SavedOutfit[]
+  bodyProfile BodyProfile?
 
   @@map("users")
 }
@@ -68,10 +70,25 @@ model OutfitGenerationJob {
   createdAt     DateTime               @default(now()) @map("created_at")
   updatedAt     DateTime               @updatedAt @map("updated_at")
   user          User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  bodyProfile   BodyProfile?           @relation(fields: [bodyProfileId], references: [id], onDelete: SetNull)
   result        OutfitResult?
 
   @@index([userId, status, createdAt])
   @@map("outfit_generation_jobs")
+}
+
+model BodyProfile {
+  id                   Int                    @id @default(autoincrement())
+  userId               Int                    @unique @map("user_id")
+  heightCm             Int?                   @map("height_cm")
+  weightKg             Decimal?               @map("weight_kg") @db.Decimal(5, 2)
+  bodyType             String?                @map("body_type") @db.VarChar(60)
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  outfitGenerationJobs OutfitGenerationJob[]
+
+  @@map("body_profiles")
 }
 
 model OutfitResult {

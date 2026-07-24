@@ -17,6 +17,7 @@ import { OutfitService } from './services/outfit.service.js';
 import { OutfitAiAdapter } from './services/outfit-ai.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
+import { UserProfileService } from './services/user-profile.service.js';
 
 const createDefaultImageService = () => {
     const repository = new ImageRepository(getPrisma);
@@ -35,6 +36,7 @@ const defaultHealthCheck = async () => {
 };
 
 const createDefaultClosetService = () => new ClosetService({ getPrisma });
+const createDefaultUserProfileService = () => new UserProfileService({ getPrisma });
 const createDefaultOutfitService = () => new OutfitService({
     repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
 });
@@ -43,6 +45,7 @@ export const createApp = ({
     imageService = createDefaultImageService(),
     authService = createDefaultAuthService(),
     closetService = createDefaultClosetService(),
+    userProfileService = createDefaultUserProfileService(),
     outfitService = createDefaultOutfitService(),
     authenticate = authenticateJwt,
     healthCheck = defaultHealthCheck,
@@ -52,11 +55,12 @@ export const createApp = ({
     app.locals.imageService = imageService;
     app.locals.authService = authService;
     app.locals.closetService = closetService;
+    app.locals.userProfileService = userProfileService;
     app.locals.outfitService = outfitService;
 
     app.use(cors());
     app.use(express.json());
-    app.use('/api', createIndexRouter({ imageService, authService, closetService, outfitService, authenticate, internalToken }));
+    app.use('/api', createIndexRouter({ imageService, authService, closetService, userProfileService, outfitService, authenticate, internalToken }));
 
     app.get('/health', async (req, res, next) => {
         try {
