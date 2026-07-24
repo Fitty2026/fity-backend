@@ -5,10 +5,12 @@ import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import { getPrisma } from './config/prisma.js';
-import { requireAuthContext } from './middlewares/auth-context.middleware.js';
+import { authenticateJwt } from './middlewares/auth-context.middleware.js';
 import { sendResponse, errorHandler } from './middlewares/response.middleware.js';
+import { AuthRepository } from './repositories/auth.repository.js';
 import { ImageRepository } from './repositories/image.repository.js';
 import { createIndexRouter } from './routes/index.js';
+import { AuthService } from './services/auth.service.js';
 import { ImageService } from './services/image.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 
@@ -20,21 +22,27 @@ const createDefaultImageService = () => {
     return new ImageService({ repository, storage, storageProvider: 'local' });
 };
 
+const createDefaultAuthService = () => new AuthService({
+    repository: new AuthRepository(getPrisma)
+});
+
 const defaultHealthCheck = async () => {
     await getPrisma().$queryRaw`SELECT 1`;
 };
 
 export const createApp = ({
     imageService = createDefaultImageService(),
-    authenticate = requireAuthContext,
+    authService = createDefaultAuthService(),
+    authenticate = authenticateJwt,
     healthCheck = defaultHealthCheck
 } = {}) => {
     const app = express();
     app.locals.imageService = imageService;
+    app.locals.authService = authService;
 
     app.use(cors());
     app.use(express.json());
-    app.use('/api', createIndexRouter({ imageService, authenticate }));
+    app.use('/api', createIndexRouter({ imageService, authService, authenticate }));
 
     app.get('/health', async (req, res, next) => {
         try {
