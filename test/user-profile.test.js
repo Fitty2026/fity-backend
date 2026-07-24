@@ -8,8 +8,8 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const createPrisma = () => {
     const state = {
         users: new Map([
-            [7, { id: 7, email: 'owner@example.com', passwordHash: 'secret-hash', name: 'Owner', styleTags: null, createdAt: '2026-07-24T00:00:00.000Z', updatedAt: '2026-07-24T00:00:00.000Z' }],
-            [8, { id: 8, email: 'other@example.com', passwordHash: 'other-hash', name: 'Other', styleTags: null, createdAt: '2026-07-24T00:00:00.000Z', updatedAt: '2026-07-24T00:00:00.000Z' }]
+            [7, { id: 7, username: 'owner7', email: 'owner@example.com', passwordHash: 'secret-hash', name: 'Owner', styleTags: null, createdAt: '2026-07-24T00:00:00.000Z', updatedAt: '2026-07-24T00:00:00.000Z' }],
+            [8, { id: 8, username: null, email: 'other@example.com', passwordHash: 'other-hash', name: 'Other', styleTags: null, createdAt: '2026-07-24T00:00:00.000Z', updatedAt: '2026-07-24T00:00:00.000Z' }]
         ]),
         bodyProfiles: new Map(),
         nextBodyProfileId: 1
@@ -73,6 +73,7 @@ test('User/Profile routes fail closed without req.auth.userId', async () => {
 test('user profile reads and updates only the authenticated user with an allowlist', async () => {
     const initial = await api.get('/api/v1/users/me').set('x-test-user-id', '7');
     assert.equal(initial.status, 200);
+    assert.equal(initial.body.result.username, 'owner7');
     assert.equal(initial.body.result.email, 'owner@example.com');
     assert.equal(initial.body.result.passwordHash, undefined);
 

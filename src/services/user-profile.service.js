@@ -6,6 +6,7 @@ const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
 const publicUser = (user) => ({
     id: user.id,
+    username: user.username,
     email: user.email,
     name: user.name,
     styleTags: user.styleTags,

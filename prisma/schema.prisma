@@ -38,6 +38,7 @@ enum OutfitGenerationStatus {
 // 예시 user테이블. 나중에 ERD보면서 수정하면 됩니다.
 model User {
   id             Int             @id @default(autoincrement())
+  username       String?         @unique @db.VarChar(30)
   email          String          @unique
   passwordHash   String?         @map("password_hash") @db.VarChar(60)
   name           String?

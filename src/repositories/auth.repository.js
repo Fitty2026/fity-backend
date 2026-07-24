@@ -7,9 +7,13 @@ export class AuthRepository {
         return this.getPrisma().user.findUnique({ where: { email } });
     }
 
-    async create({ email, passwordHash, name }) {
+    async findByUsername(username) {
+        return this.getPrisma().user.findUnique({ where: { username } });
+    }
+
+    async create({ username, email, passwordHash, name }) {
         return this.getPrisma().user.create({
-            data: { email, passwordHash, name }
+            data: { username, email, passwordHash, name }
         });
     }
 }
