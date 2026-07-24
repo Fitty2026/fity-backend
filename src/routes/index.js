@@ -1,11 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const exampleController = require('../controllers/example.controller');
+import express from 'express';
+import * as exampleController from '../controllers/example.controller.js';
+import { createImageRouter } from './image.routes.js';
 
-router.get('/example', exampleController.getExample);
+export const createIndexRouter = (dependencies) => {
+    const router = express.Router();
 
-//라우터추가시 여기에 작성하시면 됩니다.
-//const ~~
-//router.use ~~
+    router.get('/example', exampleController.getExample);
+    router.use('/v1/images', createImageRouter(dependencies));
 
-module.exports = router;
+    return router;
+};

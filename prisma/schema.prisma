@@ -1,19 +1,62 @@
 datasource db {
-  provider = "mysql" // 💡 우리 팀의 구원 투수 MySQL 지정
-  url      = env("DATABASE_URL")
+  provider = "mysql"
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
+enum ImageAssetType {
+  PROFILE
+  BODY_PROFILE
+  CLOSET_ITEM
+  OUTFIT_RESULT
+}
+
+enum ImageAssetOrigin {
+  USER_UPLOAD
+  GENERATED
+  FALLBACK
+}
+
+enum ImageAssetStatus {
+  UPLOADING
+  ACTIVE
+  UPLOAD_FAILED
+  DELETE_PENDING
+  DELETE_FAILED
+  DELETED
+}
+
 // 예시 user테이블. 나중에 ERD보면서 수정하면 됩니다.
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
+  id        Int          @id @default(autoincrement())
+  email     String       @unique
   name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  images    ImageAsset[]
 
   @@map("users")
+}
+
+model ImageAsset {
+  id               Int              @id @default(autoincrement())
+  userId           Int              @map("user_id")
+  imageType        ImageAssetType   @map("image_type")
+  origin           ImageAssetOrigin @default(USER_UPLOAD)
+  storageProvider  String           @map("storage_provider") @db.VarChar(40)
+  storageKey       String           @unique @map("storage_key") @db.VarChar(500)
+  originalFileName String?          @map("original_file_name") @db.VarChar(255)
+  mimeType         String           @map("mime_type") @db.VarChar(100)
+  fileSizeBytes    Int              @map("file_size_bytes")
+  checksumSha256   String           @map("checksum_sha256") @db.Char(64)
+  status           ImageAssetStatus @default(UPLOADING)
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  deletedAt        DateTime?        @map("deleted_at")
+  user             User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@map("image_assets")
 }
