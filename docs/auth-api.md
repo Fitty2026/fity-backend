@@ -24,7 +24,20 @@
 
 회원가입 단계에서는 약관 동의 값을 받지 않습니다. 약관 동의는 로그인 이후 별도 흐름과 API로 분리합니다.
 
-비밀번호는 bcrypt 해시로만 저장됩니다. 이메일은 소문자와 공백 제거 후 고유하게 저장합니다. 성공 결과는 `accessToken`, `tokenType` (`Bearer`), `id`, `username`, `email`, `name`만 반환하며 비밀번호나 해시는 반환하지 않습니다.
+비밀번호는 bcrypt 해시로만 저장됩니다. 이메일은 소문자와 공백 제거 후 고유하게 저장합니다. 성공 결과는 다음 형식이며 비밀번호나 해시는 반환하지 않습니다.
+
+```json
+{
+  "accessToken": "<JWT_TOKEN>",
+  "tokenType": "Bearer",
+  "user": {
+    "id": 7,
+    "username": "fitty1234",
+    "email": "user@example.com",
+    "name": "홍길동"
+  }
+}
+```
 
 ## 로그인
 

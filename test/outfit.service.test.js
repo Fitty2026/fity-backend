@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { OutfitService } from '../src/services/outfit.service.js';
 import { OutfitAiAdapter } from '../src/services/outfit-ai.service.js';
+import { OutfitRepository } from '../src/repositories/outfit.repository.js';
 import { createApp } from '../src/app.js';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
@@ -39,13 +40,31 @@ describe('OutfitService', () => {
         const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
         await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], bodyProfileId: 8 }), { code: 'NOT_FOUND404' });
     });
-    it('records adapter failures as a terminal failed state', async () => {
+    it('completes with the static fallback when the adapter fails', async () => {
         const repository = new MemoryOutfitRepository();
         const service = new OutfitService({ repository, aiAdapter: { generate: async () => { const error = new Error('timeout'); error.code = 'AI_TIMEOUT'; throw error; } } });
         const created = await service.createGenerationJob(1, { closetItemIds: [4] });
         await service.processGenerationJob(created.jobId);
         const result = await service.getGenerationJob(1, created.jobId);
-        assert.equal(result.status, 'failed'); assert.equal(result.failure.code, 'AI_TIMEOUT');
+        assert.equal(result.status, 'completed');
+        assert.deepEqual(result.generatedImage, {
+            outfitResultId: 2,
+            imageUrl: '/fallback/default-outfit.png',
+            provider: 'fitty-fallback',
+            fallbackUsed: true,
+            recommendedClosetItemIds: [4]
+        });
+        assert.equal(result.failure, null);
+    });
+    it('completes with fallback when the AI adapter is not configured', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: new OutfitAiAdapter({ endpoint: undefined }) });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] });
+        await service.processGenerationJob(created.jobId);
+        const result = await service.getGenerationJob(1, created.jobId);
+        assert.equal(result.status, 'completed');
+        assert.equal(result.generatedImage.fallbackUsed, true);
+        assert.equal(result.generatedImage.imageUrl, '/fallback/default-outfit.png');
     });
     it('scopes saved outfit lifecycle to its owner', async () => {
         const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
@@ -59,11 +78,25 @@ describe('OutfitService', () => {
         ['timeout', { generate: async () => { const error = new Error('timeout'); error.code = 'AI_TIMEOUT'; throw error; } }],
         ['rejection', { generate: async () => { const error = new Error('unavailable'); error.code = 'AI_UNAVAILABLE'; throw error; } }],
         ['foreign recommendation', { generate: async () => ({ generatedImageUrl: 'https://ai.example/outfit.png', provider: 'test-ai', fallbackUsed: false, recommendedClosetItemIds: [99] }) }]
-    ]) it(`never leaves a job processing after ${name}`, async () => {
+    ]) it(`completes with fallback after ${name}`, async () => {
         const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: adapter });
         const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
         const job = await service.getGenerationJob(1, created.jobId);
-        assert.equal(job.status, 'failed');
+        assert.equal(job.status, 'completed');
+        assert.equal(job.generatedImage.fallbackUsed, true);
+        assert.deepEqual(job.generatedImage.recommendedClosetItemIds, [4]);
+    });
+    it('accepts only root-relative or HTTPS fallback URLs', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({
+            repository,
+            aiAdapter: { generate: async () => { throw new Error('unavailable'); } },
+            fallbackImageUrl: 'javascript:alert(1)'
+        });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] });
+        await service.processGenerationJob(created.jobId);
+        const job = await service.getGenerationJob(1, created.jobId);
+        assert.equal(job.generatedImage.imageUrl, '/fallback/default-outfit.png');
     });
 });
 
@@ -80,7 +113,40 @@ describe('OutfitAiAdapter', () => {
     });
 });
 
+describe('OutfitRepository', () => {
+    it('returns the related outfit result when a saved outfit is created', async () => {
+        let createArgs;
+        const repository = new OutfitRepository({
+            outfitGenerationJob: {},
+            savedOutfit: {
+                create: async (args) => {
+                    createArgs = args;
+                    return {
+                        id: 3,
+                        userId: 1,
+                        outfitResultId: 2,
+                        name: 'daily',
+                        outfitResult: { generatedImageUrl: '/fallback/default-outfit.png' }
+                    };
+                }
+            }
+        });
+
+        const saved = await repository.saveResult({ userId: 1, outfitResultId: 2, name: 'daily' });
+
+        assert.deepEqual(createArgs.include, { outfitResult: true });
+        assert.equal(saved.outfitResult.generatedImageUrl, '/fallback/default-outfit.png');
+    });
+});
+
 describe('Outfit HTTP auth boundary', () => {
+    it('serves the packaged fallback image without authentication', async () => {
+        const app = createApp({ outfitService: new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter }), healthCheck: async () => {} });
+        const response = await request(app).get('/fallback/default-outfit.png');
+        assert.equal(response.status, 200);
+        assert.equal(response.headers['content-type'], 'image/png');
+        assert.deepEqual([...response.body.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    });
     it('uses the JWT subject for outfit creation and rejects unauthenticated requests', async () => {
         const repository = new MemoryOutfitRepository();
         const app = createApp({ outfitService: new OutfitService({ repository, aiAdapter: readyAdapter }), healthCheck: async () => {} });
@@ -94,6 +160,27 @@ describe('Outfit HTTP auth boundary', () => {
             const created = await api.post('/api/v1/outfits/generation-jobs').set('authorization', `Bearer ${token}`).send({ closetItemIds: [4], userId: 2 });
             assert.equal(created.status, 200);
             assert.equal(repository.jobs[0].userId, 1);
+        } finally {
+            if (oldSecret === undefined) delete process.env.JWT_ACCESS_SECRET; else process.env.JWT_ACCESS_SECRET = oldSecret;
+        }
+    });
+    it('starts background processing after an authenticated generation request', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const app = createApp({ outfitService: service, healthCheck: async () => {} });
+        const oldSecret = process.env.JWT_ACCESS_SECRET;
+        process.env.JWT_ACCESS_SECRET = 'a-long-test-secret-that-is-at-least-32-chars';
+        try {
+            const token = jwt.sign({ sub: '1' }, process.env.JWT_ACCESS_SECRET, { algorithm: 'HS256' });
+            const created = await request(app)
+                .post('/api/v1/outfits/generation-jobs')
+                .set('authorization', `Bearer ${token}`)
+                .send({ closetItemIds: [4] });
+            assert.equal(created.status, 200);
+
+            await new Promise((resolve) => setImmediate(resolve));
+            const job = await service.getGenerationJob(1, created.body.result.jobId);
+            assert.equal(job.status, 'completed');
         } finally {
             if (oldSecret === undefined) delete process.env.JWT_ACCESS_SECRET; else process.env.JWT_ACCESS_SECRET = oldSecret;
         }

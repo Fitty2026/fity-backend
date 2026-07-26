@@ -63,7 +63,10 @@ export class OutfitRepository {
     findResult(userId, id) { return this.prisma.outfitResult.findFirst({ where: { id, userId } }); }
 
     saveResult({ userId, outfitResultId, name }) {
-        return this.prisma.savedOutfit.create({ data: { userId, outfitResultId, name } });
+        return this.prisma.savedOutfit.create({
+            data: { userId, outfitResultId, name },
+            include: { outfitResult: true }
+        });
     }
 
     listSaved(userId, skip, take) {
