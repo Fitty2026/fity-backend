@@ -2,6 +2,8 @@
 
 > 이 문서는 `prisma/schema.prisma`와 `prisma/migrations/*/migration.sql`을 기준으로 작성한 **현재 구현 스키마 ERD**입니다. 기획 단계의 목표 모델이 아니라, 현재 공유 브랜치에 정의된 MySQL 테이블·관계·제약조건을 나타냅니다.
 
+![Fitty Backend ERD](./erd.png)
+
 ```mermaid
 erDiagram
     USERS {
