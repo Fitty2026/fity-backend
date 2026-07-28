@@ -75,6 +75,8 @@ set_runtime_values() {
 
     mv "${temp_file}" "${ENV_FILE}"
     chmod 600 "${ENV_FILE}"
+    export IMAGE_REF="${image_ref}"
+    export APP_VERSION="${app_version}"
 }
 
 current_image_ref() {
