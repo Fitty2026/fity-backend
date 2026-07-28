@@ -24,7 +24,7 @@
 | `image` | binary | Y | JPG, PNG, WEBP, HEIC, HEIF |
 | `imageType` | string | Y | `PROFILE`, `BODY_PROFILE`, `CLOSET_ITEM` |
 
-`OUTFIT_RESULT`는 클라이언트 업로드 값이 아닙니다. BE4가 `ImageService.createGeneratedImage()`를 호출해 `GENERATED` 또는 `FALLBACK` 결과로 저장합니다.
+`OUTFIT_RESULT`는 클라이언트 업로드 값이 아닙니다. `ImageService.createGeneratedImage()` 내부 서비스로 `GENERATED` 또는 `FALLBACK` 결과를 저장할 수 있습니다. 다만 현재 BE4 코디 서비스는 이 메서드와 연결되지 않았으며 AI가 반환한 외부 URL을 직접 저장하므로, 생성 결과 파일 영속화는 후속 통합이 필요합니다.
 
 ```bash
 curl -X POST 'http://localhost:3000/api/v1/images/upload' \

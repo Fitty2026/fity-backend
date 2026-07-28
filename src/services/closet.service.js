@@ -56,7 +56,8 @@ export class ClosetService {
     async registerItem(userId, payload) {
         const imageId = Number(payload.imageId);
         if (!Number.isSafeInteger(imageId) || imageId <= 0) throw problem(400, 'CLOSET4004', '유효한 imageId가 필요합니다.');
-        const tags = normalizeTags(payload.tags) || [];
+        const tags = normalizeTags(payload.tags);
+        if (!tags || tags.length === 0) throw problem(400, 'CLOSET4002', 'tags는 한 개 이상 필요합니다.');
         const data = {
             userId,
             imageId,

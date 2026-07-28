@@ -107,6 +107,13 @@ test('sync records consent for the authenticated user only', async () => {
 
 test('register validates owned active closet image, ignores body userId, and lists only its owner', async () => {
     const { api } = fixture();
+    for (const tags of [undefined, []]) {
+        const response = await api.post('/api/v1/closets/items')
+            .set('x-test-user-id', '7')
+            .send({ ...validItem, tags });
+        assert.equal(response.status, 400);
+        assert.equal(response.body.code, 'CLOSET4002');
+    }
     const created = await api.post('/api/v1/closets/items').set('x-test-user-id', '7').send({ ...validItem, userId: 8 });
     assert.equal(created.status, 201);
     assert.deepEqual(created.body.result.tags, ['여름', '흰색']);

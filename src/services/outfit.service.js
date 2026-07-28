@@ -4,11 +4,38 @@ const normalizeIds = (value, field, { required = false } = {}) => {
     if (!Array.isArray(value) || (required && value.length === 0) || !value.every((id) => Number.isSafeInteger(id) && id > 0)) throw httpError(400, 'REQUEST400', `${field} must be an array of positive integer IDs.`);
     return [...new Set(value)];
 };
+const DEFAULT_FALLBACK_IMAGE_URL = '/fallback/default-outfit.png';
+const normalizeFallbackImageUrl = (value) => {
+    if (typeof value !== 'string' || value.trim() === '') return DEFAULT_FALLBACK_IMAGE_URL;
+    const candidate = value.trim();
+    try {
+        if (candidate.startsWith('/') && !candidate.startsWith('//')) {
+            const parsed = new URL(candidate, 'https://fitty.local');
+            return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        }
+        const parsed = new URL(candidate);
+        return parsed.protocol === 'https:' && !parsed.username && !parsed.password
+            ? parsed.toString()
+            : DEFAULT_FALLBACK_IMAGE_URL;
+    } catch {
+        return DEFAULT_FALLBACK_IMAGE_URL;
+    }
+};
+const createFallbackResult = (job, generatedImageUrl) => ({
+    generatedImageUrl,
+    recommendedClosetItemIds: [...job.closetItemIds],
+    provider: 'fitty-fallback',
+    fallbackUsed: true
+});
 const toJob = (job) => ({ jobId: job.id, status: job.status.toLowerCase(), outfitResultId: job.result?.id ?? null, generatedImage: job.result ? { outfitResultId: job.result.id, imageUrl: job.result.generatedImageUrl, provider: job.result.provider, fallbackUsed: job.result.fallbackUsed, recommendedClosetItemIds: job.result.recommendedClosetItemIds } : null, failure: job.status === 'FAILED' ? { code: job.failureCode, reason: job.failureReason } : null, createdAt: job.createdAt, completedAt: job.completedAt });
 const toSaved = (saved) => ({ id: saved.id, savedOutfitId: saved.id, outfitResultId: saved.outfitResultId, name: saved.name, imageUrl: saved.outfitResult.generatedImageUrl, createdAt: saved.createdAt, savedAt: saved.createdAt, isSaved: true });
 
 export class OutfitService {
-    constructor({ repository, aiAdapter }) { this.repository = repository; this.aiAdapter = aiAdapter; }
+    constructor({ repository, aiAdapter, fallbackImageUrl = process.env.FALLBACK_OUTFIT_IMAGE_URL }) {
+        this.repository = repository;
+        this.aiAdapter = aiAdapter;
+        this.fallbackImageUrl = normalizeFallbackImageUrl(fallbackImageUrl);
+    }
     async createGenerationJob(userId, input = {}) {
         const closetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { required: true });
         const styleTagIds = normalizeIds(input.styleTagIds, 'styleTagIds');
@@ -31,10 +58,15 @@ export class OutfitService {
         const job = await this.repository.claimQueuedJob(Number(rawId));
         if (!job) return null;
         try {
-            const aiResult = await this.aiAdapter.generate({ jobId: job.id, userId: job.userId, bodyProfileId: job.bodyProfileId, closetItemIds: job.closetItemIds, styleTagIds: job.styleTagIds });
-            const ownedRecommendationIds = await this.repository.findOwnedClosetItemIds(job.userId, aiResult.recommendedClosetItemIds);
-            if (ownedRecommendationIds.length !== aiResult.recommendedClosetItemIds.length) throw Object.assign(new Error('AI recommended an inaccessible closet item.'), { code: 'AI_INVALID_RECOMMENDATION' });
-            await this.repository.completeJob({ job, aiResult });
+            let result;
+            try {
+                result = await this.aiAdapter.generate({ jobId: job.id, userId: job.userId, bodyProfileId: job.bodyProfileId, closetItemIds: job.closetItemIds, styleTagIds: job.styleTagIds });
+                const ownedRecommendationIds = await this.repository.findOwnedClosetItemIds(job.userId, result.recommendedClosetItemIds);
+                if (ownedRecommendationIds.length !== result.recommendedClosetItemIds.length) throw Object.assign(new Error('AI recommended an inaccessible closet item.'), { code: 'AI_INVALID_RECOMMENDATION' });
+            } catch {
+                result = createFallbackResult(job, this.fallbackImageUrl);
+            }
+            await this.repository.completeJob({ job, aiResult: result });
         }
         catch (error) { await this.repository.failJob({ id: job.id, code: error.code || 'AI_GENERATION_FAILED', reason: error.message || 'AI generation failed.' }); }
         return this.repository.findJob(job.userId, job.id);

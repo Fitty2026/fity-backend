@@ -60,6 +60,12 @@ export const createApp = ({
 
     app.use(cors());
     app.use(express.json());
+    app.use('/fallback', express.static(path.resolve('public/fallback'), {
+        dotfiles: 'deny',
+        fallthrough: false,
+        index: false,
+        maxAge: '1h'
+    }));
     app.use('/api', createIndexRouter({ imageService, authService, closetService, userProfileService, outfitService, authenticate, internalToken }));
 
     app.get('/health', async (req, res, next) => {
