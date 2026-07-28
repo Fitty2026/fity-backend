@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll and deploy the Fitty staging image
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/kth88/services/products/fitty
+ExecStart=/home/kth88/services/products/fitty/deploy/bin/poll-and-deploy.sh
+UMask=0077
+TimeoutStartSec=20min
