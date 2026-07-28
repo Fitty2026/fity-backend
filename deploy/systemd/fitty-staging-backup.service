@@ -1,0 +1,11 @@
+[Unit]
+Description=Create the daily Fitty staging backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/kth88/services/products/fitty
+ExecStart=/home/kth88/services/products/fitty/deploy/bin/backup.sh daily
+UMask=0077
+TimeoutStartSec=30min

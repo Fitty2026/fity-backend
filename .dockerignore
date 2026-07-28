@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+coverage
+dist
+build
+logs
+*.log
+var/images
+backups
+state
+Fitty_Vault

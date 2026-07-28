@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the Fitty staging image every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Persistent=true
+Unit=fitty-staging-poll.service
+
+[Install]
+WantedBy=timers.target

@@ -41,6 +41,26 @@ const createDefaultOutfitService = () => new OutfitService({
     repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
 });
 
+export const createCorsOptions = (configuredOrigins = process.env.CORS_ALLOWED_ORIGINS) => {
+    const allowedOrigins = configuredOrigins
+        ?.split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+
+    if (!allowedOrigins?.length) {
+        return {};
+    }
+
+    return {
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+            return callback(new Error('허용되지 않은 CORS origin입니다.'));
+        }
+    };
+};
+
 export const createApp = ({
     imageService = createDefaultImageService(),
     authService = createDefaultAuthService(),
@@ -58,7 +78,7 @@ export const createApp = ({
     app.locals.userProfileService = userProfileService;
     app.locals.outfitService = outfitService;
 
-    app.use(cors());
+    app.use(cors(createCorsOptions()));
     app.use(express.json());
     app.use('/fallback', express.static(path.resolve('public/fallback'), {
         dotfiles: 'deny',
@@ -74,6 +94,7 @@ export const createApp = ({
             return sendResponse(res, {
                 uptime: process.uptime(),
                 timestamp: new Date().toISOString(),
+                appVersion: process.env.APP_VERSION || 'local',
                 dbConnection_mysql: 'CONNECTED'
             }, '서버 및 데이터베이스 상태: 정상');
         } catch (cause) {

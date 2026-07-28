@@ -2,6 +2,9 @@
   "name": "fity-backend",
   "version": "1.0.0",
   "description": "FITY Backend",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "main": "src/server.js",
   "scripts": {
     "test": "node --test test/*.test.js",
