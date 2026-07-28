@@ -129,15 +129,22 @@ check_external_health() {
         )
     fi
     local response
-    response="$(curl "${curl_args[@]}" "${EXTERNAL_HEALTH_URL:?EXTERNAL_HEALTH_URL is required}")"
-    compose exec --no-TTY api node -e '
-        const response = JSON.parse(process.argv[1]);
-        const expected = process.argv[2];
-        if (response?.result?.appVersion !== expected) {
-            console.error(`외부 health APP_VERSION 불일치: expected=${expected}, actual=${response?.result?.appVersion}`);
-            process.exit(1);
-        }
-    ' "${response}" "${expected_version}"
+    for _ in {1..15}; do
+        if response="$(curl "${curl_args[@]}" "${EXTERNAL_HEALTH_URL:?EXTERNAL_HEALTH_URL is required}")" \
+            && compose exec --no-TTY api node -e '
+                const response = JSON.parse(process.argv[1]);
+                const expected = process.argv[2];
+                if (response?.result?.appVersion !== expected) {
+                    console.error(`외부 health APP_VERSION 불일치: expected=${expected}, actual=${response?.result?.appVersion}`);
+                    process.exit(1);
+                }
+            ' "${response}" "${expected_version}"; then
+            return 0
+        fi
+        sleep 2
+    done
+    echo "외부 health 또는 APP_VERSION 확인 시간이 초과됐습니다." >&2
+    return 1
 }
 
 write_state_atomically() {
