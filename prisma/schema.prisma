@@ -107,15 +107,33 @@ model OutfitGenerationJob {
 model BodyProfile {
   id                   Int                    @id @default(autoincrement())
   userId               Int                    @unique @map("user_id")
-  heightCm             Int?                   @map("height_cm")
-  weightKg             Decimal?               @map("weight_kg") @db.Decimal(5, 2)
-  bodyType             String?                @map("body_type") @db.VarChar(60)
+  bodyBalance          BodyBalance?           @map("body_balance")
+  shoulderWidth        ShoulderWidth?         @map("shoulder_width")
+  frameSize            FrameSize?             @map("frame_size")
   createdAt            DateTime               @default(now()) @map("created_at")
   updatedAt            DateTime               @updatedAt @map("updated_at")
   user                 User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
   outfitGenerationJobs OutfitGenerationJob[]
 
   @@map("body_profiles")
+}
+
+enum BodyBalance {
+  UPPER_BODY_DEVELOPED
+  BALANCED
+  LOWER_BODY_DEVELOPED
+}
+
+enum ShoulderWidth {
+  NARROW
+  AVERAGE
+  WIDE
+}
+
+enum FrameSize {
+  SMALL
+  MEDIUM
+  LARGE
 }
 
 model OutfitResult {

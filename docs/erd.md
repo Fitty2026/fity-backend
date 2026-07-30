@@ -36,9 +36,9 @@ erDiagram
     BODY_PROFILES {
         int id PK
         int user_id FK, UK
-        int height_cm "nullable"
-        decimal weight_kg "nullable, DECIMAL(5,2)"
-        string body_type "nullable, VARCHAR(60)"
+        enum body_balance "nullable: UPPER_BODY_DEVELOPED, BALANCED, LOWER_BODY_DEVELOPED"
+        enum shoulder_width "nullable: NARROW, AVERAGE, WIDE"
+        enum frame_size "nullable: SMALL, MEDIUM, LARGE"
         datetime created_at
         datetime updated_at
     }

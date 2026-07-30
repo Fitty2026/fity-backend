@@ -3,8 +3,8 @@ import jwt from 'jsonwebtoken';
 
 const SALT_ROUNDS = 12;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const USERNAME_PATTERN = /^[a-zA-Z0-9]+$/;
-const SIGNUP_FIELDS = new Set(['name', 'username', 'email', 'password']);
+const USERNAME_PATTERN = /^[a-z0-9]+$/;
+const SIGNUP_FIELDS = new Set(['name', 'loginId', 'email', 'password']);
 
 const createRequestError = (message, code = 'AUTH4001') => {
     const error = new Error(message);
@@ -52,11 +52,11 @@ const validateSignupInput = (input) => {
     }
 
     const credentials = validateCredentials(input);
-    const username = normalizeUsername(input?.username);
+    const username = normalizeUsername(input?.loginId);
     const name = typeof input?.name === 'string' ? input.name.trim() : '';
 
-    if (username.length < 4 || username.length > 30 || !USERNAME_PATTERN.test(username)) {
-        throw createRequestError('아이디는 4~30자의 영문과 숫자만 사용할 수 있습니다.');
+    if (username.length < 4 || username.length > 20 || !USERNAME_PATTERN.test(username)) {
+        throw createRequestError('아이디는 영문 소문자와 숫자로 이루어진 4~20자여야 합니다.');
     }
     if (!name || name.length > 191) {
         throw createRequestError('이름은 1자 이상 191자 이하여야 합니다.');
@@ -112,7 +112,13 @@ export class AuthService {
             }
             throw error;
         }
-        return this.createAuthResult(user);
+        return {
+            userId: user.id,
+            loginId: user.username,
+            email: user.email,
+            name: user.name,
+            createdAt: user.createdAt
+        };
     }
 
     async login(input) {
@@ -131,10 +137,6 @@ export class AuthService {
             subject: String(user.id),
             expiresIn
         });
-        return {
-            accessToken,
-            tokenType: 'Bearer',
-            user: { id: user.id, username: user.username, email: user.email, name: user.name }
-        };
+        return { accessToken, userId: user.id, nickname: user.name };
     }
 }

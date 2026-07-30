@@ -51,10 +51,12 @@ git diff --check
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| POST | `/api/v1/auth/signup` | 회원가입 및 액세스 토큰 발급 |
+| POST | `/api/v1/auth/signup` | 회원가입 (토큰 미발급, 별도 로그인 필요) |
 | POST | `/api/v1/auth/login` | 이메일 로그인 및 액세스 토큰 발급 |
 | GET/PATCH | `/api/v1/users/me` | 내 프로필 조회·수정 |
-| GET/PUT | `/api/v1/body-profiles/me` | 내 체형 프로필 조회·저장 |
+| POST | `/api/v1/users/agreements` | 약관 동의 저장 |
+| GET | `/api/v1/body-profiles/me` | 내 체형 프로필 조회 |
+| POST | `/api/v1/body-profiles/type` | 온보딩 체형 타입 저장 |
 | POST | `/api/v1/images/upload` | 사용자 이미지 영속 저장 |
 | GET | `/api/v1/images/:imageId` | 소유자 전용 메타데이터 조회 |
 | GET | `/api/v1/images/:imageId/content` | 소유자 전용 이미지 바이트 조회 |

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000';
 const runId = `${process.env.APP_VERSION || 'local'}-${Date.now()}`.replace(/[^a-zA-Z0-9]/g, '').slice(-24);
 const email = `smoke-${runId}@fitty.invalid`;
-const username = `smoke${runId}`.slice(0, 30);
+const loginId = `smoke${runId}`.toLowerCase().slice(0, 20);
 const password = `Fitty-${runId}-test`;
 
 const request = async (pathname, options = {}) => {
@@ -25,7 +25,7 @@ const json = (method, body, token) => ({
 
 await request('/api/v1/auth/signup', json('POST', {
     name: 'Staging Smoke',
-    username,
+    loginId,
     email,
     password
 }));
