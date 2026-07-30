@@ -113,7 +113,7 @@ const createPrisma = () => {
 const authenticateForTest = (req, res, next) => {
     const userId = Number(req.get('x-test-user-id'));
     if (Number.isSafeInteger(userId) && userId > 0) { req.auth = { userId }; return next(); }
-    return next(Object.assign(new Error('인증이 필요합니다.'), { status: 401, code: 'AUTH4011' }));
+    return next(Object.assign(new Error('인증이 필요합니다.'), { status: 401, code: 'AUTH401_01' }));
 };
 
 let request;
@@ -133,7 +133,7 @@ beforeEach(() => {
 test('User/Profile routes fail closed without req.auth.userId', async () => {
     const response = await api.get('/api/v1/users/me');
     assert.equal(response.status, 401);
-    assert.equal(response.body.code, 'AUTH4011');
+    assert.equal(response.body.code, 'AUTH401_01');
 });
 
 test('user profile reads and updates only the authenticated user with an allowlist', async () => {

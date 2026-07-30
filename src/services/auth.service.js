@@ -89,10 +89,10 @@ export class AuthService {
             this.repository.findByUsername(username)
         ]);
         if (existingEmail) {
-            throw createRequestError('이미 가입된 이메일 주소입니다.', 'AUTH4091');
+            throw createRequestError('이미 가입된 이메일 주소입니다.', 'SIGNUP409_01');
         }
         if (existingUsername) {
-            throw createRequestError('이미 사용 중인 아이디입니다.', 'AUTH4092');
+            throw createRequestError('이미 사용 중인 아이디입니다.', 'SIGNUP409_02');
         }
 
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -103,10 +103,10 @@ export class AuthService {
             if (error?.code === 'P2002') {
                 const target = uniqueConstraintTarget(error);
                 if (target.includes('username')) {
-                    throw createRequestError('이미 사용 중인 아이디입니다.', 'AUTH4092');
+                    throw createRequestError('이미 사용 중인 아이디입니다.', 'SIGNUP409_02');
                 }
                 if (target.includes('email')) {
-                    throw createRequestError('이미 가입된 이메일 주소입니다.', 'AUTH4091');
+                    throw createRequestError('이미 가입된 이메일 주소입니다.', 'SIGNUP409_01');
                 }
                 throw createRequestError('이미 사용 중인 이메일 또는 아이디입니다.', 'AUTH4093');
             }
