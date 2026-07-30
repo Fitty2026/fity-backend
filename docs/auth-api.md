@@ -60,7 +60,7 @@
 
 ## 보호된 API
 
-`Authorization: Bearer <accessToken>` 헤더를 전송합니다. 공통 미들웨어가 HS256 서명, 만료시간, `sub` 사용자 ID를 검증한 뒤에만 `req.auth.userId`를 설정합니다. 헤더가 없거나 위조·만료된 토큰은 `AUTH4011`로 거부합니다.
+`Authorization: Bearer <accessToken>` 헤더를 전송합니다. 공통 미들웨어가 HS256 서명, 만료시간, `sub` 사용자 ID를 검증한 뒤에만 `req.auth.userId`를 설정합니다. 헤더가 없거나 위조·만료된 토큰은 `AUTH401_01`로 거부합니다.
 
 ## 기존 사용자 데이터
 

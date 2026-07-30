@@ -74,7 +74,7 @@ class MemoryPrisma {
 const authenticateForTest = (req, res, next) => {
     const userId = Number(req.get('x-test-user-id'));
     if (Number.isSafeInteger(userId) && userId > 0) { req.auth = { userId }; return next(); }
-    return next(Object.assign(new Error('인증이 필요합니다.'), { status: 401, code: 'AUTH4011' }));
+    return next(Object.assign(new Error('인증이 필요합니다.'), { status: 401, code: 'AUTH401_01' }));
 };
 
 const fixture = () => {
@@ -89,7 +89,7 @@ test('Closet routes fail closed without req.auth.userId', async () => {
     for (const [method, path] of [['post', '/api/v1/closets/sync'], ['get', '/api/v1/closets/items'], ['post', '/api/v1/closets/items'], ['patch', '/api/v1/closets/items/1'], ['delete', '/api/v1/closets/items/1']]) {
         const response = await api[method](path).send(validItem);
         assert.equal(response.status, 401);
-        assert.equal(response.body.code, 'AUTH4011');
+        assert.equal(response.body.code, 'AUTH401_01');
     }
 });
 

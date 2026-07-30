@@ -71,7 +71,7 @@ describe('BE2 image asset API', () => {
         const response = await request(app).post('/api/v1/images/upload');
 
         assert.equal(response.status, 401);
-        assert.equal(response.body.code, 'AUTH4011');
+        assert.equal(response.body.code, 'AUTH401_01');
     });
 
     it('stores a supported image and returns a protected content URL', async () => {

@@ -79,14 +79,14 @@ describe('BE1 auth API', () => {
         await request(app).post('/api/v1/auth/signup').send(payload).expect(200);
         const duplicate = await request(app).post('/api/v1/auth/signup').send(payload);
         assert.equal(duplicate.status, 400);
-        assert.equal(duplicate.body.code, 'AUTH4091');
+        assert.equal(duplicate.body.code, 'SIGNUP409_01');
 
         const duplicateUsername = await request(app).post('/api/v1/auth/signup').send({
             ...payload,
             email: 'other@example.com'
         });
         assert.equal(duplicateUsername.status, 400);
-        assert.equal(duplicateUsername.body.code, 'AUTH4092');
+        assert.equal(duplicateUsername.body.code, 'SIGNUP409_02');
 
     });
 
@@ -155,12 +155,12 @@ describe('BE1 auth API', () => {
         const usernameConflict = await request(createConflictApp('users_username_key'))
             .post('/api/v1/auth/signup')
             .send(payload);
-        assert.equal(usernameConflict.body.code, 'AUTH4092');
+        assert.equal(usernameConflict.body.code, 'SIGNUP409_02');
 
         const emailConflict = await request(createConflictApp('users_email_key'))
             .post('/api/v1/auth/signup')
             .send(payload);
-        assert.equal(emailConflict.body.code, 'AUTH4091');
+        assert.equal(emailConflict.body.code, 'SIGNUP409_01');
     });
 
     it('does not accept agreement fields during signup', async () => {
@@ -222,6 +222,6 @@ describe('BE1 auth API', () => {
             .get('/api/v1/images/1')
             .set('Authorization', 'Bearer invalid');
         assert.equal(rejected.status, 401);
-        assert.equal(rejected.body.code, 'AUTH4011');
+        assert.equal(rejected.body.code, 'AUTH401_01');
     });
 });
