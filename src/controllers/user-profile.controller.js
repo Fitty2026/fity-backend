@@ -20,11 +20,30 @@ export const createUserProfileController = (userProfileService) => ({
         catch (error) { return next(error); }
     },
     getBodyProfile: async (req, res, next) => {
-        try { return sendResponse(res, await userProfileService.getBodyProfile(userIdOf(req)), '체형 프로필을 조회했습니다.'); }
+        try { return sendResponse(res, await userProfileService.getBodyProfile(userIdOf(req)), '체형 프로필 조회에 성공했습니다.'); }
         catch (error) { return next(error); }
     },
+
     upsertBodyProfile: async (req, res, next) => {
-        try { return sendResponse(res, await userProfileService.upsertBodyProfile(userIdOf(req), req.body || {}), '체형 프로필을 저장했습니다.'); }
+        try { return sendResponse(res, await userProfileService.upsertBodyProfile(userIdOf(req), req.body || {}), '체형 프로필이 성공적으로 저장되었습니다.'); }
+        catch (error) { return next(error); }
+    },
+
+    saveBodyProfileType: async (req, res, next) => {
+        try { return sendResponse(res, await userProfileService.saveBodyProfileType(userIdOf(req), req.body || {}), '요청에 성공했습니다.'); }
+        catch (error) { return next(error); }
+    },
+
+    analyzeBodyProfile: async (req, res, next) => {
+        try {
+            // req.files에는 multer 등으로 들어온 frontImage, sideImage, backImage가 담기게 됨
+            const images = req.files || {};
+            return sendResponse(res, await userProfileService.analyzeBodyProfile(userIdOf(req), images), '체형 분석에 성공했습니다.');
+        } catch (error) { return next(error); }
+    },
+
+    saveBodyProfile: async (req, res, next) => {
+        try { return sendResponse(res, await userProfileService.saveBodyProfile(userIdOf(req), req.body || {}), '체형 프로필이 성공적으로 저장되었습니다.'); }
         catch (error) { return next(error); }
     }
 });
