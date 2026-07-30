@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up the Fitty staging data every day
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Seoul
+Persistent=true
+Unit=fitty-staging-backup.service
+
+[Install]
+WantedBy=timers.target

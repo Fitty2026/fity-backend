@@ -1,8 +1,20 @@
 import express from 'express';
-import * as exampleController from '../controllers/example.controller.js';; 
-const router = express.Router();
+import * as exampleController from '../controllers/example.controller.js';
+import { createAuthRouter } from './auth.routes.js';
+import { createImageRouter } from './image.routes.js';
+import { createClosetRouter } from './closet.route.js';
+import { createOutfitRouter } from './outfit.routes.js';
+import { createUserProfileRouter } from './user-profile.routes.js';
 
-router.get('/example', exampleController.getExample);
-// 라우터 추가 시 여기에 작성하시면 됩니다.
+export const createIndexRouter = (dependencies) => {
+    const router = express.Router();
 
-export default router;
+    router.get('/example', exampleController.getExample);
+    router.use('/v1/auth', createAuthRouter({ authService: dependencies.authService }));
+    router.use('/v1/images', createImageRouter(dependencies));
+    router.use('/v1/closets', createClosetRouter(dependencies));
+    router.use('/v1', createUserProfileRouter(dependencies));
+    router.use('/v1/outfits', createOutfitRouter(dependencies));
+
+    return router;
+};

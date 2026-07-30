@@ -8,12 +8,17 @@ export const sendResponse = (res, data, message = "요청에 성공하였습니�
 };
 
 export const errorHandler = (err, req, res, next) => {
-    console.error(err.stack);
+    const status = Number.isInteger(err.status) ? err.status : 500;
+    const isExpected = Number.isInteger(err.status) && typeof err.code === 'string';
+
+    if (status >= 500) {
+        console.error(err.stack);
+    }
     
-    return res.status(err.status || 400).json({ 
+    return res.status(status).json({
         isSuccess: false,
-        code: err.code || "COMMON400",
-        message: err.message || "요청에 실패했습니다.",
+        code: isExpected ? err.code : 'COMMON500',
+        message: isExpected ? err.message : '서버 내부 오류가 발생했습니다.',
         result: null
     });
 };
