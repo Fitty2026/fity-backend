@@ -25,7 +25,7 @@ class MemoryAuthRepository {
             error.code = 'P2002';
             throw error;
         }
-        const user = { id: this.nextId++, username, email, passwordHash, name };
+        const user = { id: this.nextId++, username, email, passwordHash, name, createdAt: new Date().toISOString() };
         this.users.set(email, user);
         return user;
     }
@@ -51,27 +51,27 @@ beforeEach(() => {
 });
 
 describe('BE1 auth API', () => {
-    it('hashes a password and returns a signed access token on signup', async () => {
+    it('hashes a password and returns the spec signup contract without a token', async () => {
         const response = await request(app).post('/api/v1/auth/signup').send({
-            username: 'Fitty1234',
+            loginId: 'fitty1234',
             email: ' User@Example.com ',
             password: 'password123',
             name: ' Fitty '
         });
 
         assert.equal(response.status, 200);
-        assert.equal(response.body.result.user.username, 'fitty1234');
-        assert.equal(response.body.result.user.email, 'user@example.com');
-        assert.equal(response.body.result.user.name, 'Fitty');
-        assert.equal(response.body.result.user.passwordHash, undefined);
-        assert.match(response.body.result.accessToken, /^[\w-]+\.[\w-]+\.[\w-]+$/);
+        assert.equal(response.body.result.userId, 1);
+        assert.equal(response.body.result.loginId, 'fitty1234');
+        assert.equal(response.body.result.email, 'user@example.com');
+        assert.equal(response.body.result.name, 'Fitty');
+        assert.equal(response.body.result.accessToken, undefined);
+        assert.ok(response.body.result.createdAt);
         assert.notEqual(repository.users.get('user@example.com').passwordHash, 'password123');
-        assert.equal(jwt.verify(response.body.result.accessToken, TEST_SECRET).sub, '1');
     });
 
     it('rejects duplicate signup and invalid credential input', async () => {
         const payload = {
-            username: 'fitty1234',
+            loginId: 'fitty1234',
             email: 'user@example.com',
             password: 'password123',
             name: 'Fitty'
@@ -92,7 +92,7 @@ describe('BE1 auth API', () => {
 
     it('requires all four Figma signup fields', async () => {
         const payload = {
-            username: 'fitty1234',
+            loginId: 'fitty1234',
             email: 'user@example.com',
             password: 'password123',
             name: 'Fitty'
@@ -107,17 +107,17 @@ describe('BE1 auth API', () => {
         }
     });
 
-    it('validates username and name independently', async () => {
+    it('validates loginId and name independently', async () => {
         const payload = {
-            username: 'fitty1234',
+            loginId: 'fitty1234',
             email: 'user@example.com',
             password: 'password123',
             name: 'Fitty'
         };
-        const invalidUsernames = ['abc', 'a'.repeat(31), '한글아이디', 'fitty_user'];
+        const invalidLoginIds = ['abc', 'a'.repeat(21), '한글아이디', 'fitty_user'];
 
-        for (const username of invalidUsernames) {
-            const response = await request(app).post('/api/v1/auth/signup').send({ ...payload, username });
+        for (const loginId of invalidLoginIds) {
+            const response = await request(app).post('/api/v1/auth/signup').send({ ...payload, loginId });
             assert.equal(response.status, 400);
             assert.equal(response.body.code, 'AUTH4001');
         }
@@ -146,7 +146,7 @@ describe('BE1 auth API', () => {
             healthCheck: async () => {}
         });
         const payload = {
-            username: 'fitty1234',
+            loginId: 'fitty1234',
             email: 'user@example.com',
             password: 'password123',
             name: 'Fitty'
@@ -165,7 +165,7 @@ describe('BE1 auth API', () => {
 
     it('does not accept agreement fields during signup', async () => {
         const response = await request(app).post('/api/v1/auth/signup').send({
-            username: 'fitty1234',
+            loginId: 'fitty1234',
             email: 'user@example.com',
             password: 'password123',
             name: 'Fitty',
@@ -176,9 +176,9 @@ describe('BE1 auth API', () => {
         assert.equal(response.body.code, 'AUTH4001');
     });
 
-    it('logs in only with the correct password', async () => {
+    it('logs in only with the correct password and returns the spec login contract', async () => {
         await request(app).post('/api/v1/auth/signup').send({
-            username: 'fitty1234',
+            loginId: 'fitty1234',
             email: 'user@example.com',
             password: 'password123',
             name: 'Fitty'
@@ -188,7 +188,10 @@ describe('BE1 auth API', () => {
             email: 'user@example.com', password: 'password123'
         });
         assert.equal(success.status, 200);
-        assert.equal(success.body.result.tokenType, 'Bearer');
+        assert.equal(success.body.result.userId, 1);
+        assert.equal(success.body.result.nickname, 'Fitty');
+        assert.match(success.body.result.accessToken, /^[\w-]+\.[\w-]+\.[\w-]+$/);
+        assert.equal(jwt.verify(success.body.result.accessToken, TEST_SECRET).sub, '1');
 
         const failure = await request(app).post('/api/v1/auth/login').send({
             email: 'user@example.com', password: 'incorrect-password'

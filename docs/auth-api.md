@@ -11,31 +11,28 @@
 ```json
 {
   "name": "홍길동",
-  "username": "fitty1234",
+  "loginId": "fitty1234",
   "email": "user@example.com",
   "password": "at-least-8-characters"
 }
 ```
 
 - `name`: 1~191자
-- `username`: 4~30자의 영문·숫자, 소문자로 정규화되는 고유값
+- `loginId`: 영문 소문자·숫자로 이루어진 4~20자, 소문자로 정규화되는 고유값
 - `email`: 유효한 이메일 형식, 고유값
 - `password`: 8~72자
 
-회원가입 단계에서는 약관 동의 값을 받지 않습니다. 약관 동의는 로그인 이후 별도 흐름과 API로 분리합니다.
+회원가입 단계에서는 약관 동의 값을 받지 않습니다. 약관 동의는 로그인 이후 별도 흐름과 API(`POST /api/v1/users/agreements`)로 분리합니다.
 
-비밀번호는 bcrypt 해시로만 저장됩니다. 이메일은 소문자와 공백 제거 후 고유하게 저장합니다. 성공 결과는 다음 형식이며 비밀번호나 해시는 반환하지 않습니다.
+비밀번호는 bcrypt 해시로만 저장됩니다. 이메일은 소문자와 공백 제거 후 고유하게 저장합니다. 회원가입은 토큰을 발급하지 않으며, 가입 후에는 `POST /api/v1/auth/login`을 별도로 호출해야 합니다. 성공 결과는 다음 형식이며 비밀번호나 해시는 반환하지 않습니다.
 
 ```json
 {
-  "accessToken": "<JWT_TOKEN>",
-  "tokenType": "Bearer",
-  "user": {
-    "id": 7,
-    "username": "fitty1234",
-    "email": "user@example.com",
-    "name": "홍길동"
-  }
+  "userId": 7,
+  "loginId": "fitty1234",
+  "email": "user@example.com",
+  "name": "홍길동",
+  "createdAt": "2026-07-30T00:00:00.000Z"
 }
 ```
 
@@ -48,6 +45,16 @@
 ```
 
 로그인은 아이디가 아닌 이메일을 사용합니다. 존재하지 않는 이메일과 잘못된 비밀번호에는 모두 `AUTH4012`를 반환합니다.
+
+성공 결과는 다음 형식입니다.
+
+```json
+{
+  "accessToken": "<JWT_TOKEN>",
+  "userId": 7,
+  "nickname": "홍길동"
+}
+```
 
 현재 로그아웃은 클라이언트가 저장한 액세스 토큰을 삭제하는 방식입니다. 서버 측 토큰 무효화 저장소가 없으므로 별도 로그아웃 API는 제공하지 않습니다.
 

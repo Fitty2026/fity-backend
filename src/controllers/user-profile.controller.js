@@ -16,15 +16,25 @@ export const createUserProfileController = (userProfileService) => ({
         catch (error) { return next(error); }
     },
     saveOnboardingStyles: async (req, res, next) => {
-        try { return sendResponse(res, await userProfileService.saveOnboardingStyles(userIdOf(req), req.body || {}), '온보딩 스타일을 저장했습니다.'); }
+        try {
+            await userProfileService.saveOnboardingStyles(userIdOf(req), req.body || {});
+            return sendResponse(res, null, '온보딩 스타일을 저장했습니다.');
+        }
         catch (error) { return next(error); }
     },
     getBodyProfile: async (req, res, next) => {
         try { return sendResponse(res, await userProfileService.getBodyProfile(userIdOf(req)), '체형 프로필을 조회했습니다.'); }
         catch (error) { return next(error); }
     },
-    upsertBodyProfile: async (req, res, next) => {
-        try { return sendResponse(res, await userProfileService.upsertBodyProfile(userIdOf(req), req.body || {}), '체형 프로필을 저장했습니다.'); }
+    saveBodyType: async (req, res, next) => {
+        try { return sendResponse(res, await userProfileService.saveBodyType(userIdOf(req), req.body || {}), '체형 타입을 저장했습니다.'); }
+        catch (error) { return next(error); }
+    },
+    saveAgreements: async (req, res, next) => {
+        try {
+            await userProfileService.saveAgreements(userIdOf(req), req.body || {});
+            return sendResponse(res, null, '약관 동의를 저장했습니다.');
+        }
         catch (error) { return next(error); }
     }
 });
