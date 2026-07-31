@@ -31,8 +31,10 @@ enum ImageAssetStatus {
 enum OutfitGenerationStatus {
   QUEUED
   PROCESSING
+  QC_PENDING
   COMPLETED
   FAILED
+  EXPIRED
 }
 
 // 예시 user테이블. 나중에 ERD보면서 수정하면 됩니다.
@@ -52,6 +54,7 @@ model User {
   outfitGenerationJobs OutfitGenerationJob[]
   outfitResults OutfitResult[]
   savedOutfits SavedOutfit[]
+  outfitRevisions OutfitRevision[]
   bodyProfile BodyProfile?
   stylePreferences UserStylePreference[]
 
@@ -90,7 +93,12 @@ model OutfitGenerationJob {
   bodyProfileId Int?                   @map("body_profile_id")
   closetItemIds Json                   @map("closet_item_ids")
   styleTagIds   Json                   @map("style_tag_ids")
-  failureCode  String?                 @map("failure_code") @db.VarChar(80)
+  situation     String?                @db.VarChar(30)
+  selectedDate  DateTime?              @map("selected_date") @db.Date
+  weather       Json?
+  progress      Int                    @default(5)
+  expiresAt     DateTime               @map("expires_at")
+  failureCode   String?                @map("failure_code") @db.VarChar(80)
   failureReason String?                @map("failure_reason") @db.VarChar(500)
   startedAt     DateTime?              @map("started_at")
   completedAt   DateTime?              @map("completed_at")
@@ -99,6 +107,7 @@ model OutfitGenerationJob {
   user          User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
   bodyProfile   BodyProfile?           @relation(fields: [bodyProfileId], references: [id], onDelete: SetNull)
   result        OutfitResult?
+  revision      OutfitRevision?
 
   @@index([userId, status, createdAt])
   @@map("outfit_generation_jobs")
@@ -148,6 +157,7 @@ model OutfitResult {
   user                    User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   generationJob           OutfitGenerationJob  @relation(fields: [generationJobId], references: [id], onDelete: Restrict)
   savedOutfits            SavedOutfit[]
+  sourceRevisions         OutfitRevision[]     @relation("RevisionSource")
 
   @@index([userId, createdAt])
   @@map("outfit_results")
@@ -158,13 +168,34 @@ model SavedOutfit {
   userId         Int          @map("user_id")
   outfitResultId Int          @map("outfit_result_id")
   name           String       @db.VarChar(120)
+  tags           Json
+  memo           String?      @db.VarChar(500)
   createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  deletedAt      DateTime?    @map("deleted_at")
   user           User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   outfitResult   OutfitResult @relation(fields: [outfitResultId], references: [id], onDelete: Restrict)
 
   @@unique([userId, outfitResultId])
   @@index([userId, createdAt])
+  @@index([userId, deletedAt])
   @@map("saved_outfits")
+}
+
+model OutfitRevision {
+  id                   Int                 @id @default(autoincrement())
+  userId               Int                 @map("user_id")
+  sourceOutfitResultId Int                 @map("source_outfit_result_id")
+  replaceItemId        Int                 @map("replace_item_id")
+  newItemId            Int                 @map("new_item_id")
+  generationJobId      Int                 @unique @map("generation_job_id")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sourceOutfitResult   OutfitResult        @relation("RevisionSource", fields: [sourceOutfitResultId], references: [id], onDelete: Restrict)
+  generationJob        OutfitGenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@map("outfit_revisions")
 }
 
 model ImageAsset {

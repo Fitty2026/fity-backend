@@ -7,14 +7,17 @@ export class OutfitAiAdapter {
         this.fetch = fetchImpl;
     }
 
-    async generate({ jobId, userId, bodyProfileId, closetItemIds, styleTagIds }) {
+    async generate({ jobId, userId, bodyProfileId, closetItemIds, styleTagIds, situation, selectedDate, weather }) {
         if (!this.endpoint) throw adapterError('AI_NOT_CONFIGURED', 'AI outfit adapter is not configured.');
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
         try {
             const response = await this.fetch(this.endpoint, {
                 method: 'POST', headers: { 'content-type': 'application/json' }, signal: controller.signal,
-                body: JSON.stringify({ jobId, userId, bodyProfileId, closetItemIds, styleTagIds })
+                body: JSON.stringify({
+                    jobId, userId, bodyProfileId, closetItemIds, styleTagIds, situation, selectedDate,
+                    weather: weather ? { ...weather, rain: weather.condition === 'RAINY' } : null
+                })
             });
             if (!response.ok) throw adapterError('AI_UNAVAILABLE', `AI outfit adapter returned ${response.status}.`);
             const data = await response.json().catch(() => { throw adapterError('AI_INVALID_RESPONSE', 'AI outfit adapter returned invalid JSON.'); });
