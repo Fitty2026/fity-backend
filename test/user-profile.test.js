@@ -24,7 +24,12 @@ const createPrisma = () => {
         styleTags,
         stylePreferences: new Map(),
         consentLogs: [],
-        failStylePreferenceCreate: false
+        failStylePreferenceCreate: false,
+        imageAssets: new Map([
+            [12, { id: 12, userId: 7, imageType: 'BODY_PROFILE', status: 'ACTIVE', deletedAt: null }],
+            [13, { id: 13, userId: 8, imageType: 'BODY_PROFILE', status: 'ACTIVE', deletedAt: null }],
+            [14, { id: 14, userId: 7, imageType: 'CLOSET_ITEM', status: 'ACTIVE', deletedAt: null }]
+        ])
     };
     const client = {
         state,
@@ -104,6 +109,17 @@ const createPrisma = () => {
             createMany: async ({ data }) => {
                 state.consentLogs.push(...data.map((entry) => ({ ...entry, createdAt: new Date().toISOString() })));
                 return { count: data.length };
+            }
+        },
+        imageAsset: {
+            findFirst: async ({ where }) => {
+                const image = state.imageAssets.get(where.id);
+                if (!image) return null;
+                if (where.userId !== undefined && image.userId !== where.userId) return null;
+                if (where.imageType !== undefined && image.imageType !== where.imageType) return null;
+                if (where.status !== undefined && image.status !== where.status) return null;
+                if (where.deletedAt !== undefined && image.deletedAt !== where.deletedAt) return null;
+                return clone(image);
             }
         }
     };
@@ -263,6 +279,44 @@ test('body profile lookup 404s when nothing was saved', async () => {
     const response = await api.get('/api/v1/body-profiles/me').set('x-test-user-id', '7');
     assert.equal(response.status, 404);
     assert.equal(response.body.code, 'PROFILE4041');
+});
+
+test('body profile analyze is an MVP stub that upserts a deterministic result from an owned BODY_PROFILE image', async () => {
+    const analyzed = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({
+        userId: 8, imageId: 12
+    });
+    assert.equal(analyzed.status, 200);
+    assert.equal(analyzed.body.result.provider, 'stub');
+    assert.ok(analyzed.body.result.bodyBalance);
+    assert.ok(analyzed.body.result.shoulderWidth);
+    assert.ok(analyzed.body.result.frameSize);
+    assert.equal(prisma.state.bodyProfiles.get(7).userId, 7);
+    assert.equal(prisma.state.bodyProfiles.get(8), undefined);
+
+    const repeat = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({ imageId: 12 });
+    assert.equal(repeat.status, 200);
+    assert.deepEqual(
+        { bodyBalance: repeat.body.result.bodyBalance, shoulderWidth: repeat.body.result.shoulderWidth, frameSize: repeat.body.result.frameSize },
+        { bodyBalance: analyzed.body.result.bodyBalance, shoulderWidth: analyzed.body.result.shoulderWidth, frameSize: analyzed.body.result.frameSize }
+    );
+});
+
+test('body profile analyze rejects missing imageId, another user\'s image, and the wrong image type', async () => {
+    const missing = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({});
+    assert.equal(missing.status, 400);
+    assert.equal(missing.body.code, 'PROFILE4005');
+
+    const othersImage = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({ imageId: 13 });
+    assert.equal(othersImage.status, 404);
+    assert.equal(othersImage.body.code, 'PROFILE4042');
+
+    const wrongType = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({ imageId: 14 });
+    assert.equal(wrongType.status, 404);
+    assert.equal(wrongType.body.code, 'PROFILE4042');
+
+    const missingImage = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({ imageId: 999 });
+    assert.equal(missingImage.status, 404);
+    assert.equal(missingImage.body.code, 'PROFILE4042');
 });
 
 test('agreements require the mandatory targets and persist a consent log entry per target', async () => {

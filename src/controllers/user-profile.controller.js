@@ -30,6 +30,10 @@ export const createUserProfileController = (userProfileService) => ({
         try { return sendResponse(res, await userProfileService.saveBodyType(userIdOf(req), req.body || {}), '체형 타입을 저장했습니다.'); }
         catch (error) { return next(error); }
     },
+    analyzeBodyProfile: async (req, res, next) => {
+        try { return sendResponse(res, await userProfileService.analyzeBodyProfile(userIdOf(req), req.body || {}), '체형 사진을 분석했습니다.'); }
+        catch (error) { return next(error); }
+    },
     saveAgreements: async (req, res, next) => {
         try {
             await userProfileService.saveAgreements(userIdOf(req), req.body || {});

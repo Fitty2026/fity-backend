@@ -13,5 +13,6 @@ export const createUserProfileRouter = ({ userProfileService, authenticate }) =>
     router.post('/users/onboarding/style', controller.saveOnboardingStyles);
     router.get('/body-profiles/me', controller.getBodyProfile);
     router.post('/body-profiles/type', controller.saveBodyType);
+    router.post('/body-profiles/analyze', controller.analyzeBodyProfile);
     return router;
 };

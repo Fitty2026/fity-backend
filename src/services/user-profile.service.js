@@ -82,6 +82,26 @@ const bodyTypeData = (payload) => {
     };
 };
 
+const BODY_BALANCE_ORDER = [...BODY_BALANCE_VALUES];
+const SHOULDER_WIDTH_ORDER = [...SHOULDER_WIDTH_VALUES];
+const FRAME_SIZE_ORDER = [...FRAME_SIZE_VALUES];
+
+const analyzeImageId = (payload) => {
+    const keys = Object.keys(payload).filter((key) => key !== 'userId');
+    if (keys.length !== 1 || keys[0] !== 'imageId' || !Number.isSafeInteger(payload.imageId) || payload.imageId <= 0) {
+        throw problem(400, 'PROFILE4005', 'imageId(양의 정수)를 전달해야 합니다.');
+    }
+    return payload.imageId;
+};
+
+// MVP 스텁: 실제 AI 분석 없이 imageId로부터 결정론적 값을 산출한다.
+// 실 AI 연동은 별도 이슈에서 다룬다.
+const stubBodyAnalysis = (imageId) => ({
+    bodyBalance: BODY_BALANCE_ORDER[imageId % BODY_BALANCE_ORDER.length],
+    shoulderWidth: SHOULDER_WIDTH_ORDER[imageId % SHOULDER_WIDTH_ORDER.length],
+    frameSize: FRAME_SIZE_ORDER[imageId % FRAME_SIZE_ORDER.length]
+});
+
 const agreementInput = (payload) => {
     const keys = Object.keys(payload).filter((key) => key !== 'userId');
     if (keys.length !== 1 || keys[0] !== 'agreements' || !Array.isArray(payload.agreements) || payload.agreements.length === 0) {
@@ -199,6 +219,25 @@ export class UserProfileService {
             update: data
         });
         return publicBodyProfile(profile);
+    }
+
+    async analyzeBodyProfile(userId, payload) {
+        const imageId = analyzeImageId(payload);
+        const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
+        if (!user) throw problem(404, 'USER4041', '존재하지 않는 사용자입니다.');
+
+        const image = await this.client.imageAsset.findFirst({
+            where: { id: imageId, userId, imageType: 'BODY_PROFILE', status: 'ACTIVE', deletedAt: null }
+        });
+        if (!image) throw problem(404, 'PROFILE4042', '분석할 체형 사진을 찾을 수 없습니다.');
+
+        const data = stubBodyAnalysis(image.id);
+        const profile = await this.client.bodyProfile.upsert({
+            where: { userId },
+            create: { userId, ...data },
+            update: data
+        });
+        return { ...publicBodyProfile(profile), provider: 'stub' };
     }
 
     async saveAgreements(userId, payload) {

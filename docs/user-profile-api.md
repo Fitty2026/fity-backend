@@ -118,6 +118,17 @@
 
 저장된 체형 프로필이 없으면 `PROFILE4041`을 반환합니다.
 
-## 참고: 체형 사진 AI 분석 (PROFILE-02, PROFILE-03)
+## PROFILE-02: 체형 사진 분석 (MVP 스텁)
 
-체형 사진을 업로드해 AI로 분석하는 `POST /api/v1/body-profiles/analyze`와 그 결과를 저장하는 `POST /api/v1/body-profiles`는 외부 AI 분석 연동이 필요해 이번 정렬 범위에서 제외했습니다. 별도 이슈에서 다룹니다.
+`POST /api/v1/body-profiles/analyze`
+
+```json
+{
+  "imageId": 12
+}
+```
+
+- `imageId`는 이미지 업로드 API(BE2)로 먼저 등록한, 소유자가 본인이고 `imageType`이 `BODY_PROFILE`이며 상태가 `ACTIVE`인 이미지여야 합니다. 아니면 `PROFILE4042`.
+- **이번 구현은 실제 AI 분석이 아닌 MVP 스텁입니다.** `imageId`로부터 결정론적으로 `bodyBalance`/`shoulderWidth`/`frameSize`를 산출해 `body_profiles`에 upsert합니다. 응답의 `provider: "stub"` 필드로 스텁 결과임을 구분합니다.
+- 성공 응답은 PROFILE-01과 동일한 필드에 `provider: "stub"`이 추가됩니다.
+- 실제 외부 AI 분석 연동(체형 분류, 랜드마크, 이미지 품질 검사 등 `erd/body_profile_data.schema.json` 전체 스키마 반영)은 [이슈 #29](https://github.com/Fitty2026/fity-backend/issues/29)에서 관리합니다.
