@@ -1,2 +1,6 @@
-ALTER TABLE `closet_items`
-    ADD COLUMN `deletedAt` DATETIME(3) NULL;
+-- No-op: `closet_items.deletedAt` was already added by migration
+-- `20260801030000_add_closet_item_deleted_at` (merged to develop concurrently
+-- with the branch that introduced this migration), so this file previously
+-- duplicated that ALTER TABLE and broke `prisma migrate deploy` with a
+-- "Duplicate column name" error. Left as a no-op to preserve migration
+-- history ordering instead of deleting the applied migration record.
