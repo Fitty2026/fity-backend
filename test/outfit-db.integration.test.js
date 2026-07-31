@@ -80,7 +80,7 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
 
         const saved = await service.saveOutfit(owner.id, {
             outfitResultId: completed.outfitResultId,
-            name: 'DB integration outfit',
+            name: 'DB outfit',
             tags: ['work'],
             memo: 'Persisted through Prisma'
         });
