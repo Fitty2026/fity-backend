@@ -33,5 +33,13 @@ export const createClosetController = (closetService) => ({
     deleteItem: async (req, res, next) => {
         try { await closetService.deleteItem(userIdOf(req), itemIdOf(req.params.itemId)); return send(res, 200, '옷장 아이템 삭제에 성공했습니다.', null); }
         catch (error) { return next(error); }
+    },
+    restoreItem: async (req, res, next) => {
+        try { return send(res, 200, '옷장 아이템 복구에 성공했습니다.', await closetService.restoreItem(userIdOf(req), itemIdOf(req.params.itemId))); }
+        catch (error) { return next(error); }
+    },
+    permanentDeleteItem: async (req, res, next) => {
+        try { await closetService.permanentDelete(userIdOf(req), itemIdOf(req.params.itemId)); return send(res, 200, '옷장 아이템을 영구 삭제했습니다.', null); }
+        catch (error) { return next(error); }
     }
 });

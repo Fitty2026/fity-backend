@@ -16,14 +16,5 @@ export const createAuthController = (authService) => ({
         } catch (error) {
             return next(error);
         }
-    },
-    saveAgreements: async (req, res, next) => {
-        try {
-            const userId = req.auth?.userId || req.body?.userId; // 인증된 유저 ID 또는 요청 바디의 ID 활용
-            const result = await authService.saveAgreements(userId, req.body || {});
-            return sendResponse(res, result, '약관 동의가 완료되었습니다.');
-        } catch (error) {
-            return next(error);
-        }
     }
 });

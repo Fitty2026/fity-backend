@@ -23,6 +23,7 @@ const createPrisma = () => {
         nextBodyProfileId: 1,
         styleTags,
         stylePreferences: new Map(),
+        consentLogs: [],
         failStylePreferenceCreate: false
     };
     const client = {
@@ -98,6 +99,12 @@ const createPrisma = () => {
                 });
                 return clone(state.bodyProfiles.get(where.userId));
             }
+        },
+        consentLog: {
+            createMany: async ({ data }) => {
+                state.consentLogs.push(...data.map((entry) => ({ ...entry, createdAt: new Date().toISOString() })));
+                return { count: data.length };
+            }
         }
     };
     return client;
@@ -106,7 +113,7 @@ const createPrisma = () => {
 const authenticateForTest = (req, res, next) => {
     const userId = Number(req.get('x-test-user-id'));
     if (Number.isSafeInteger(userId) && userId > 0) { req.auth = { userId }; return next(); }
-    return next(Object.assign(new Error('인증이 필요합니다.'), { status: 401, code: 'AUTH4011' }));
+    return next(Object.assign(new Error('인증이 필요합니다.'), { status: 401, code: 'AUTH401_01' }));
 };
 
 let request;
@@ -126,7 +133,7 @@ beforeEach(() => {
 test('User/Profile routes fail closed without req.auth.userId', async () => {
     const response = await api.get('/api/v1/users/me');
     assert.equal(response.status, 401);
-    assert.equal(response.body.code, 'AUTH4011');
+    assert.equal(response.body.code, 'AUTH401_01');
 });
 
 test('user profile reads and updates only the authenticated user with an allowlist', async () => {
@@ -161,12 +168,12 @@ test('style tag catalogue exposes the fixed frontend-to-server mapping', async (
     const response = await api.get('/api/v1/style-tags').set('x-test-user-id', '7');
     assert.equal(response.status, 200);
     assert.deepEqual(response.body.result, [
-        { id: 1, code: 'FORMAL', name: '포멀', displayOrder: 1 },
-        { id: 2, code: 'FEMININE', name: '페미닌', displayOrder: 2 },
-        { id: 3, code: 'MINIMAL', name: '미니멀', displayOrder: 3 },
-        { id: 4, code: 'CASUAL', name: '캐주얼', displayOrder: 4 },
-        { id: 5, code: 'VINTAGE', name: '빈티지', displayOrder: 5 },
-        { id: 6, code: 'STREET', name: '스트리트', displayOrder: 6 }
+        { styleTagId: 1, code: 'FORMAL', name: '포멀', displayOrder: 1 },
+        { styleTagId: 2, code: 'FEMININE', name: '페미닌', displayOrder: 2 },
+        { styleTagId: 3, code: 'MINIMAL', name: '미니멀', displayOrder: 3 },
+        { styleTagId: 4, code: 'CASUAL', name: '캐주얼', displayOrder: 4 },
+        { styleTagId: 5, code: 'VINTAGE', name: '빈티지', displayOrder: 5 },
+        { styleTagId: 6, code: 'STREET', name: '스트리트', displayOrder: 6 }
     ]);
 });
 
@@ -175,12 +182,7 @@ test('onboarding style IDs persist immediately for only the authenticated user',
         userId: 8, styleTagIds: [1, 3, 5]
     });
     assert.equal(onboarding.status, 200);
-    assert.deepEqual(onboarding.body.result.styleTagIds, [1, 3, 5]);
-    assert.deepEqual(onboarding.body.result.styles, [
-        { id: 1, code: 'FORMAL', name: '포멀', displayOrder: 1 },
-        { id: 3, code: 'MINIMAL', name: '미니멀', displayOrder: 3 },
-        { id: 5, code: 'VINTAGE', name: '빈티지', displayOrder: 5 }
-    ]);
+    assert.equal(onboarding.body.result, null);
     assert.deepEqual(prisma.state.stylePreferences.get(7), [1, 3, 5]);
     assert.equal(prisma.state.users.get(8).styleTags, null);
 
@@ -196,16 +198,17 @@ test('onboarding style IDs persist immediately for only the authenticated user',
     assert.deepEqual(prisma.state.stylePreferences.get(7), [4, 6]);
 });
 
-test('onboarding style rejects unknown, duplicate, empty, and legacy string payloads', async () => {
-    for (const body of [
-        { styleTagIds: [1, 7] },
-        { styleTagIds: [1, 1] },
-        { styleTagIds: [] },
-        { styles: ['street'] }
-    ]) {
+test('onboarding style rejects unknown, duplicate, empty, and legacy string payloads with case-specific codes', async () => {
+    const cases = [
+        { body: { styles: ['street'] }, code: 'STYLE400_01' },
+        { body: { styleTagIds: [1, 1] }, code: 'STYLE400_02' },
+        { body: { styleTagIds: [] }, code: 'STYLE400_02' },
+        { body: { styleTagIds: [1, 7] }, code: 'STYLE400_03' }
+    ];
+    for (const { body, code } of cases) {
         const response = await api.post('/api/v1/users/onboarding/style').set('x-test-user-id', '7').send(body);
         assert.equal(response.status, 400);
-        assert.equal(response.body.code, 'USER4003');
+        assert.equal(response.body.code, code);
     }
     assert.equal(prisma.state.stylePreferences.get(7), undefined);
 });
@@ -226,17 +229,67 @@ test('onboarding style rolls back replacement when preference creation fails', a
     assert.deepEqual(prisma.state.stylePreferences.get(7), [1, 3]);
 });
 
-test('body profile ignores a body userId', async () => {
-    const saved = await api.put('/api/v1/body-profiles/me').set('x-test-user-id', '7').send({
-        userId: 8, heightCm: 174, weightKg: 67.5, bodyType: 'straight'
+test('body profile type ignores a body userId', async () => {
+    const saved = await api.post('/api/v1/body-profiles/type').set('x-test-user-id', '7').send({
+        userId: 8, bodyBalance: 'BALANCED', shoulderWidth: 'AVERAGE', frameSize: 'MEDIUM'
     });
     assert.equal(saved.status, 200);
-    assert.equal(saved.body.result.heightCm, 174);
-    assert.equal(saved.body.result.weightKg, 67.5);
+    assert.equal(saved.body.result.bodyBalance, 'BALANCED');
+    assert.equal(saved.body.result.shoulderWidth, 'AVERAGE');
+    assert.equal(saved.body.result.frameSize, 'MEDIUM');
     assert.equal(prisma.state.bodyProfiles.get(7).userId, 7);
     assert.equal(prisma.state.bodyProfiles.get(8), undefined);
 
     const response = await api.get('/api/v1/body-profiles/me').set('x-test-user-id', '7');
     assert.equal(response.status, 200);
-    assert.equal(response.body.result.bodyType, 'straight');
+    assert.equal(response.body.result.frameSize, 'MEDIUM');
+});
+
+test('body profile type rejects missing or invalid enum values', async () => {
+    const missing = await api.post('/api/v1/body-profiles/type').set('x-test-user-id', '7').send({
+        bodyBalance: 'BALANCED', shoulderWidth: 'AVERAGE'
+    });
+    assert.equal(missing.status, 400);
+    assert.equal(missing.body.code, 'PROFILE4001');
+
+    const invalid = await api.post('/api/v1/body-profiles/type').set('x-test-user-id', '7').send({
+        bodyBalance: 'BALANCED', shoulderWidth: 'AVERAGE', frameSize: 'HUGE'
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal(invalid.body.code, 'PROFILE4004');
+});
+
+test('body profile lookup 404s when nothing was saved', async () => {
+    const response = await api.get('/api/v1/body-profiles/me').set('x-test-user-id', '7');
+    assert.equal(response.status, 404);
+    assert.equal(response.body.code, 'PROFILE4041');
+});
+
+test('agreements require the mandatory targets and persist a consent log entry per target', async () => {
+    const missingRequired = await api.post('/api/v1/users/agreements').set('x-test-user-id', '7').send({
+        agreements: [{ target: 'TERMS_OF_SERVICE', isAgreed: true }]
+    });
+    assert.equal(missingRequired.status, 400);
+    assert.equal(missingRequired.body.code, 'AGREEMENT4003');
+
+    const saved = await api.post('/api/v1/users/agreements').set('x-test-user-id', '7').send({
+        agreements: [
+            { target: 'TERMS_OF_SERVICE', isAgreed: true },
+            { target: 'PRIVACY_POLICY', isAgreed: true },
+            { target: 'MARKETING', isAgreed: false }
+        ]
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.result, null);
+    assert.deepEqual(prisma.state.consentLogs.map(({ userId, target, isAgreed }) => ({ userId, target, isAgreed })), [
+        { userId: 7, target: 'TERMS_OF_SERVICE', isAgreed: true },
+        { userId: 7, target: 'PRIVACY_POLICY', isAgreed: true },
+        { userId: 7, target: 'MARKETING', isAgreed: false }
+    ]);
+
+    const invalidTarget = await api.post('/api/v1/users/agreements').set('x-test-user-id', '7').send({
+        agreements: [{ target: 'UNKNOWN', isAgreed: true }]
+    });
+    assert.equal(invalidTarget.status, 400);
+    assert.equal(invalidTarget.body.code, 'AGREEMENT4002');
 });

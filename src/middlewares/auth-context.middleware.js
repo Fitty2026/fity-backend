@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 export const createAuthError = () => {
     const error = new Error('인증이 필요합니다.');
     error.status = 401;
-    error.code = 'AUTH4011';
+    error.code = 'AUTH401_01';
     return error;
 };
 

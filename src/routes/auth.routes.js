@@ -7,7 +7,5 @@ export const createAuthRouter = ({ authService }) => {
 
     router.post('/signup', controller.signup);
     router.post('/login', controller.login);
-    router.post('/users/agreements', controller.saveAgreements);
-
     return router;
 };

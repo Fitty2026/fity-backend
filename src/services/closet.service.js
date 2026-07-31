@@ -88,14 +88,14 @@ export class ClosetService {
         const items = await this.client.closetItem.findMany({
             where, include: { tags: true }, orderBy: { createdAt: 'desc' }
         });
-        return items.map(toItemResponse);
+        return items.filter(item => !item.deletedAt).map(toItemResponse);
     }
 
     async getItem(userId, itemId) {
         const item = await this.client.closetItem.findFirst({
             where: { id: itemId, userId }, include: { tags: true }
         });
-        if (!item) throw problem(404, 'CLOSET4041', '존재하지 않는 옷장 아이템입니다.');
+        if (!item || item.deletedAt) throw problem(404, 'CLOSET4041', '존재하지 않는 옷장 아이템입니다.');
         return toItemResponse(item);
     }
 
@@ -109,8 +109,11 @@ export class ClosetService {
         if (Object.keys(data).length === 0) throw problem(400, 'CLOSET4005', '수정할 항목이 필요합니다.');
 
         return this.client.$transaction(async (tx) => {
-            const existing = await tx.closetItem.findFirst({ where: { id: itemId, userId }, select: { id: true } });
-            if (!existing) throw problem(404, 'CLOSET4041', '존재하지 않는 옷장 아이템입니다.');
+            const existing = await tx.closetItem.findFirst({ 
+                where: { id: itemId, userId }, 
+                select: { id: true, deletedAt: true } 
+            });
+            if (!existing || existing.deletedAt) throw problem(404, 'CLOSET4041', '존재하지 않는 옷장 아이템입니다.');
             const item = await tx.closetItem.update({ where: { id: itemId }, data, include: { tags: true } });
             return toItemResponse(item);
         });
@@ -118,8 +121,45 @@ export class ClosetService {
 
     async deleteItem(userId, itemId) {
         return this.client.$transaction(async (tx) => {
-            const deleted = await tx.closetItem.deleteMany({ where: { id: itemId, userId } });
-            if (deleted.count !== 1) throw problem(404, 'CLOSET4041', '존재하지 않는 옷장 아이템입니다.');
+            const existing = await tx.closetItem.findFirst({ where: { id: itemId, userId }, select: { id: true, deletedAt: true } });
+            if (!existing || existing.deletedAt) throw problem(404, 'CLOSET4041', '존재하지 않는 옷장 아이템이거나 이미 삭제되었습니다.');
+            
+            await tx.closetItem.update({ 
+                where: { id: itemId },
+                data: { deletedAt: new Date() } 
+            });
+        });
+    }
+
+    //아이템복구
+    async restoreItem(userId, itemId) {
+        return this.client.$transaction(async (tx) => {
+            const existing = await tx.closetItem.findFirst({ 
+                where: { id: itemId, userId }, 
+                select: { id: true, deletedAt: true } 
+            });
+            if (!existing || !existing.deletedAt) throw problem(404, 'CLOSET4041', '휴지통에 존재하지 않는 아이템입니다.');
+            
+            const item = await tx.closetItem.update({ 
+                where: { id: itemId }, 
+                data: { deletedAt: null }, 
+                include: { tags: true } 
+            });
+            return toItemResponse(item);
+        });
+    }
+    //영구삭제
+    async permanentDelete(userId, itemId) {
+        return this.client.$transaction(async (tx) => {
+            const existing = await tx.closetItem.findFirst({ 
+                where: { id: itemId, userId },
+                select: { id: true, deletedAt: true }
+            });
+            if (!existing || !existing.deletedAt) throw problem(404, 'CLOSET4041', '휴지통에 존재하지 않는 아이템입니다.');
+
+            await tx.closetItem.delete({ 
+                where: { id: itemId } 
+            });
         });
     }
 }
