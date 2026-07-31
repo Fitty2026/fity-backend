@@ -8,18 +8,40 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
 class MemoryOutfitRepository {
-    constructor() { this.jobs = []; this.results = []; this.saved = []; this.next = 1; this.ownedClosetItems = new Map([[1, new Set([4])]]); this.ownedBodyProfiles = new Map([[1, new Set([7])]]); }
-    async createJob(data) { const job = { id: this.next++, status: 'QUEUED', createdAt: new Date(), completedAt: null, failureCode: null, failureReason: null, result: null, ...data }; this.jobs.push(job); return job; }
-    async findOwnedClosetItemIds(userId, ids) { return ids.filter((id) => this.ownedClosetItems.get(userId)?.has(id)); }
-    async findOwnedBodyProfile(userId, id) { return this.ownedBodyProfiles.get(userId)?.has(id) ? { id } : null; }
-    async findJob(userId, id) { const job = this.jobs.find((item) => item.id === id && item.userId === userId); return job && { ...job, result: this.results.find((r) => r.generationJobId === job.id) || null }; }
-    async claimQueuedJob(id) { const job = this.jobs.find((item) => item.id === id && item.status === 'QUEUED'); if (!job) return null; job.status = 'PROCESSING'; job.startedAt = new Date(); return { ...job }; }
-    async completeJob({ job, aiResult }) { const result = { id: this.next++, userId: job.userId, generationJobId: job.id, createdAt: new Date(), ...aiResult }; this.results.push(result); const target = this.jobs.find((item) => item.id === job.id); target.status = 'COMPLETED'; target.completedAt = new Date(); return result; }
+    constructor() {
+        this.jobs = []; this.results = []; this.saved = []; this.revisions = []; this.next = 1;
+        this.items = new Map([[1, [{ id: 4, category: 'TOP' }, { id: 5, category: 'TOP' }, { id: 6, category: 'BOTTOM' }]]]);
+        this.bodyProfiles = new Map([[1, { id: 7 }]]);
+        this.styleTags = new Map([[1, new Set([2])]]);
+    }
+    async createOrFindActiveJob(data, now = new Date()) {
+        const active = this.jobs.find((job) => job.userId === data.userId && ['QUEUED', 'PROCESSING', 'QC_PENDING'].includes(job.status) && job.expiresAt > now);
+        if (active) return { job: active, isExistingJob: true };
+        const job = { id: this.next++, status: 'QUEUED', createdAt: new Date(now), completedAt: null, failureCode: null, failureReason: null, result: null, ...data };
+        this.jobs.push(job); return { job, isExistingJob: false };
+    }
+    async createRevisionJob({ revision, job }) { const created = (await this.createOrFindActiveJob(job)).job; const saved = { id: this.next++, ...revision, generationJobId: created.id }; this.revisions.push(saved); return { job: created, revision: saved }; }
+    async findOwnedClosetItems(userId, ids) { return (this.items.get(userId) || []).filter((item) => ids.includes(item.id)); }
+    async findOwnedClosetItemIds(userId, ids) { return (await this.findOwnedClosetItems(userId, ids)).map((item) => item.id); }
+    async findOwnedStyleTagIds(userId, ids) { return ids.filter((id) => this.styleTags.get(userId)?.has(id)); }
+    async findActiveBodyProfile(userId) { return this.bodyProfiles.get(userId) || null; }
+    async findJob(userId, id) { const job = this.jobs.find((item) => item.id === id && item.userId === userId); const result = this.results.find((r) => r.generationJobId === job?.id); return job && { ...job, result: result ? { ...result, savedOutfits: this.saved.filter((s) => s.outfitResultId === result.id && !s.deletedAt) } : null }; }
+    async findActiveJob(userId, now = new Date()) { return this.jobs.find((job) => job.userId === userId && ['QUEUED', 'PROCESSING', 'QC_PENDING'].includes(job.status) && job.expiresAt > now) || null; }
+    async listQueuedJobIds(limit = 5, now = new Date()) { return this.jobs.filter((job) => job.status === 'QUEUED' && job.expiresAt > now).slice(0, limit).map((job) => job.id); }
+    async expireStaleActiveJobs(userId, now = new Date()) { let count = 0; for (const job of this.jobs) if (job.userId === userId && ['QUEUED', 'PROCESSING', 'QC_PENDING'].includes(job.status) && job.expiresAt <= now) { job.status = 'EXPIRED'; job.failureCode = 'JOB_TIMEOUT'; job.failureReason = 'Outfit generation job expired.'; job.completedAt = now; count++; } return { count }; }
+    async expireCompletedJob(id) { const job = this.jobs.find((item) => item.id === id && item.status === 'COMPLETED'); if (!job) return { count: 0 }; job.status = 'EXPIRED'; job.failureCode = 'RESULT_EXPIRED'; job.failureReason = 'Unsaved outfit result expired.'; return { count: 1 }; }
+    async claimQueuedJob(id, now = new Date()) { const job = this.jobs.find((item) => item.id === id && item.status === 'QUEUED' && item.expiresAt > now); if (!job) return null; job.status = 'PROCESSING'; job.progress = 70; job.startedAt = now; return { ...job }; }
+    async markQcPending(id) { const job = this.jobs.find((item) => item.id === id && item.status === 'PROCESSING'); if (!job) return { count: 0 }; job.status = 'QC_PENDING'; job.progress = 90; return { count: 1 }; }
+    async completeJob({ job, aiResult }) { const result = { id: this.next++, userId: job.userId, generationJobId: job.id, createdAt: new Date(), ...aiResult }; this.results.push(result); const target = this.jobs.find((item) => item.id === job.id); target.status = 'COMPLETED'; target.progress = 100; target.completedAt = new Date(); return result; }
     async failJob({ id, code, reason }) { const job = this.jobs.find((item) => item.id === id); job.status = 'FAILED'; job.failureCode = code; job.failureReason = reason; job.completedAt = new Date(); return { count: 1 }; }
-    async findResult(userId, id) { return this.results.find((item) => item.id === id && item.userId === userId) || null; }
-    async saveResult({ userId, outfitResultId, name }) { if (this.saved.some((item) => item.userId === userId && item.outfitResultId === outfitResultId)) { const error = new Error('duplicate'); error.code = 'P2002'; throw error; } const saved = { id: this.next++, userId, outfitResultId, name, createdAt: new Date(), outfitResult: this.results.find((r) => r.id === outfitResultId) }; this.saved.push(saved); return saved; }
-    async listSaved(userId, skip, take) { const rows = this.saved.filter((item) => item.userId === userId).map((item) => ({ ...item, outfitResult: this.results.find((r) => r.id === item.outfitResultId) })); return [rows.slice(skip, skip + take), rows.length]; }
-    async deleteSaved(userId, id) { const index = this.saved.findIndex((item) => item.id === id && item.userId === userId); if (index < 0) return { count: 0 }; this.saved.splice(index, 1); return { count: 1 }; }
+    async findResult(userId, id) { const result = this.results.find((item) => item.id === id && item.userId === userId); return result ? { ...result, generationJob: this.jobs.find((job) => job.id === result.generationJobId) } : null; }
+    async saveResult({ userId, outfitResultId, name, tags, memo }) { if (this.saved.some((item) => item.userId === userId && item.outfitResultId === outfitResultId)) { const error = new Error('duplicate'); error.code = 'P2002'; throw error; } const now = new Date(); const saved = { id: this.next++, userId, outfitResultId, name, tags, memo, createdAt: now, updatedAt: now, deletedAt: null, outfitResult: await this.findResult(userId, outfitResultId) }; this.saved.push(saved); return saved; }
+    async listSaved(userId, skip, take, deleted = false) { const rows = this.saved.filter((item) => item.userId === userId && (deleted ? Boolean(item.deletedAt) : !item.deletedAt)).map((item) => ({ ...item, outfitResult: this.results.find((r) => r.id === item.outfitResultId) })); return [rows.slice(skip, skip + take), rows.length]; }
+    async findSaved(userId, id) { return this.saved.find((item) => item.id === id && item.userId === userId && !item.deletedAt) || null; }
+    async updateSaved(userId, id, data) { const item = await this.findSaved(userId, id); if (!item) return null; Object.assign(item, data, { updatedAt: new Date() }); return item; }
+    async softDeleteSaved(userId, id, deletedAt = new Date()) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && !saved.deletedAt); if (!item) return { count: 0 }; item.deletedAt = deletedAt; return { count: 1 }; }
+    async restoreSaved(userId, id) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && saved.deletedAt); if (!item) return { count: 0 }; item.deletedAt = null; return { count: 1 }; }
+    async permanentDeleteSaved(userId, id) { const index = this.saved.findIndex((saved) => saved.id === id && saved.userId === userId && saved.deletedAt); if (index < 0) return { count: 0 }; this.saved.splice(index, 1); return { count: 1 }; }
 }
 
 const readyAdapter = { generate: async () => ({ generatedImageUrl: 'https://ai.example/outfit.png', provider: 'test-ai', fallbackUsed: false, recommendedClosetItemIds: [4] }) };
@@ -36,9 +58,54 @@ describe('OutfitService', () => {
         const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
         await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4, 99] }), { code: 'FORBIDDEN403' });
     });
-    it('rejects a body profile that is not owned by the authenticated user', async () => {
+    it('uses the authenticated user body profile and ignores a bodyProfileId payload', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        await service.createGenerationJob(1, { closetItemIds: [4], bodyProfileId: 999 });
+        assert.equal(repository.jobs[0].bodyProfileId, 7);
+    });
+    it('requires the authenticated user active body profile', async () => {
+        const repository = new MemoryOutfitRepository();
+        repository.bodyProfiles.clear();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4] }), { code: 'NOT_FOUND404' });
+    });
+    it('stores recommendation context and returns the existing active job', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const first = await service.createGenerationJob(1, {
+            closetItemIds: [4], styleTagIds: [2], situation: 'DATE', selectedDate: '2026-07-29',
+            weather: { temperature: 28, condition: 'SUNNY' }
+        });
+        const second = await service.createGenerationJob(1, { closetItemIds: [5] });
+        assert.equal(first.isExistingJob, false);
+        assert.equal(second.isExistingJob, true);
+        assert.equal(second.jobId, first.jobId);
+        assert.deepEqual(second.input, first.input);
+        assert.equal(repository.jobs.length, 1);
+    });
+    it('validates situation, date, and weather values', async () => {
         const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
-        await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], bodyProfileId: 8 }), { code: 'NOT_FOUND404' });
+        await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], situation: 'PARTY' }), { code: 'REQUEST400' });
+        await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], selectedDate: '2026-02-30' }), { code: 'REQUEST400' });
+        await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], weather: { condition: 'CLOUDLY' } }), { code: 'REQUEST400' });
+        const windy = await service.createGenerationJob(1, {
+            closetItemIds: [4], selectedDate: '1999-12-31', weather: { condition: 'WINDY' }
+        });
+        assert.equal(windy.input.weather.condition, 'WINDY');
+        assert.equal(windy.input.weather.temperature, undefined);
+        assert.equal(windy.input.selectedDate, '1999-12-31');
+    });
+    it('expires a stalled active job after ten minutes', async () => {
+        const repository = new MemoryOutfitRepository();
+        let now = new Date('2026-07-29T12:00:00.000Z');
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter, now: () => now });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] });
+        now = new Date('2026-07-29T12:10:01.000Z');
+        const job = await service.getGenerationJob(1, created.jobId);
+        assert.equal(job.status, 'expired');
+        assert.equal(job.failure.code, 'JOB_TIMEOUT');
+        assert.equal(await service.getActiveGenerationJob(1), null);
     });
     it('completes with the static fallback when the adapter fails', async () => {
         const repository = new MemoryOutfitRepository();
@@ -74,6 +141,75 @@ describe('OutfitService', () => {
         await assert.rejects(() => service.deleteSavedOutfit(2, saved.id), { code: 'NOT_FOUND404' });
         assert.equal((await service.getSavedOutfits(1, {})).pagination.totalCount, 1);
     });
+    it('recovers queued jobs through the database polling boundary', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        await service.createGenerationJob(1, { closetItemIds: [4] });
+        const summary = await service.processPendingJobs(5);
+        assert.deepEqual(summary, { scanned: 1, processed: 1, failed: 0 });
+        assert.equal(repository.jobs[0].status, 'COMPLETED');
+    });
+    it('soft deletes, lists, restores, and permanently deletes a saved outfit', async () => {
+        const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
+        const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
+        const saved = await service.saveOutfit(1, { outfitResultId: resultId, name: 'daily', tags: ['date'], memo: 'memo' });
+        assert.deepEqual(saved.items, [4]);
+        const deleted = await service.deleteSavedOutfit(1, saved.id);
+        assert.equal(deleted.savedOutfitId, saved.id);
+        assert.ok(deleted.deletedAt instanceof Date);
+        assert.equal((await service.getSavedOutfits(1, {})).pagination.totalCount, 0);
+        assert.equal((await service.getDeletedSavedOutfits(1, {})).pagination.totalCount, 1);
+        const restored = await service.restoreSavedOutfit(1, saved.id);
+        assert.equal(restored.deletedAt, null);
+        assert.ok(restored.restoredAt instanceof Date);
+        assert.equal((await service.getSavedOutfits(1, {})).pagination.totalCount, 1);
+        await service.deleteSavedOutfit(1, saved.id);
+        await service.permanentlyDeleteSavedOutfit(1, saved.id);
+        assert.equal((await service.getDeletedSavedOutfits(1, {})).pagination.totalCount, 0);
+    });
+    it('reads and updates saved outfit details for its owner only', async () => {
+        const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
+        const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
+        const saved = await service.saveOutfit(1, { outfitResultId: resultId, name: 'before' });
+        const updated = await service.updateSavedOutfit(1, saved.id, { name: 'after', tags: ['work'], memo: 'updated' });
+        assert.equal(updated.name, 'after');
+        assert.deepEqual((await service.getSavedOutfit(1, saved.id)).tags, ['work']);
+        await assert.rejects(() => service.getSavedOutfit(2, saved.id), { code: 'NOT_FOUND404' });
+    });
+    it('enforces saved outfit name, tag, and memo limits from the API contract', async () => {
+        const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
+        const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
+        await assert.rejects(() => service.saveOutfit(1, { outfitResultId: resultId, name: 'x'.repeat(21) }), { code: 'REQUEST400' });
+        await assert.rejects(() => service.saveOutfit(1, { outfitResultId: resultId, tags: ['1', '2', '3', '4', '5', '6'] }), { code: 'REQUEST400' });
+        await assert.rejects(() => service.saveOutfit(1, { outfitResultId: resultId, memo: 'x'.repeat(201) }), { code: 'REQUEST400' });
+    });
+    it('does not save or revise an unsaved result after its 24-hour retention window', async () => {
+        const repository = new MemoryOutfitRepository();
+        let now = new Date('2026-07-29T12:00:00.000Z');
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter, now: () => now });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] });
+        await service.processGenerationJob(created.jobId);
+        const job = repository.jobs.find((item) => item.id === created.jobId);
+        job.completedAt = new Date(now);
+        const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
+        now = new Date('2026-07-30T12:00:01.000Z');
+        await assert.rejects(() => service.saveOutfit(1, { outfitResultId: resultId }), { code: 'NOT_FOUND404' });
+        await assert.rejects(() => service.createRevision(1, resultId, { replaceItemId: 4, newItemId: 5 }), { code: 'NOT_FOUND404' });
+    });
+    it('creates a revision only with an owned item in the same category', async () => {
+        const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
+        const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
+        const revision = await service.createRevision(1, resultId, { replaceItemId: 4, newItemId: 5 });
+        assert.equal(revision.revisionId, 4);
+        assert.equal(revision.parentOutfitResultId, resultId);
+        assert.deepEqual(repository.jobs.find((job) => job.id === revision.jobId).closetItemIds, [5]);
+        await service.processGenerationJob(revision.jobId);
+        await assert.rejects(() => service.createRevision(1, resultId, { replaceItemId: 4, newItemId: 6 }), { code: 'ITEM_NOT_COMPATIBLE' });
+    });
     for (const [name, adapter] of [
         ['timeout', { generate: async () => { const error = new Error('timeout'); error.code = 'AI_TIMEOUT'; throw error; } }],
         ['rejection', { generate: async () => { const error = new Error('unavailable'); error.code = 'AI_UNAVAILABLE'; throw error; } }],
@@ -101,6 +237,18 @@ describe('OutfitService', () => {
 });
 
 describe('OutfitAiAdapter', () => {
+    it('derives the internal rain flag from weather.condition', async () => {
+        let requestBody;
+        const adapter = new OutfitAiAdapter({
+            endpoint: 'http://ai.internal',
+            fetchImpl: async (_, request) => {
+                requestBody = JSON.parse(request.body);
+                return new Response(JSON.stringify({ generatedImageUrl: 'https://ai.example/outfit.png', recommendedClosetItemIds: [4] }), { status: 200 });
+            }
+        });
+        await adapter.generate({ jobId: 1, userId: 1, closetItemIds: [4], styleTagIds: [], weather: { condition: 'RAINY', temperature: 18 } });
+        assert.equal(requestBody.weather.rain, true);
+    });
     it('rejects malformed adapter responses', async () => {
         const adapter = new OutfitAiAdapter({ endpoint: 'http://ai.internal', fetchImpl: async () => new Response(JSON.stringify({ generatedImageUrl: 'bad' }), { status: 200 }) });
         await assert.rejects(() => adapter.generate({ jobId: 1, userId: 1, closetItemIds: [], styleTagIds: [] }), { code: 'AI_INVALID_RESPONSE' });
@@ -134,7 +282,7 @@ describe('OutfitRepository', () => {
 
         const saved = await repository.saveResult({ userId: 1, outfitResultId: 2, name: 'daily' });
 
-        assert.deepEqual(createArgs.include, { outfitResult: true });
+        assert.deepEqual(createArgs.include, { outfitResult: { include: { generationJob: true } } });
         assert.equal(saved.outfitResult.generatedImageUrl, '/fallback/default-outfit.png');
     });
 });
@@ -157,9 +305,12 @@ describe('Outfit HTTP auth boundary', () => {
             const denied = await api.post('/api/v1/outfits/generation-jobs').send({ closetItemIds: [4] });
             assert.equal(denied.status, 401);
             const token = jwt.sign({ sub: '1' }, process.env.JWT_ACCESS_SECRET, { algorithm: 'HS256' });
-            const created = await api.post('/api/v1/outfits/generation-jobs').set('authorization', `Bearer ${token}`).send({ closetItemIds: [4], userId: 2 });
+            const created = await api.post('/api/v1/outfits/generation-jobs').set('authorization', `Bearer ${token}`).send({
+                closetItemIds: [4], userId: 2, weather: { condition: 'WINDY' }
+            });
             assert.equal(created.status, 200);
             assert.equal(repository.jobs[0].userId, 1);
+            assert.deepEqual(repository.jobs[0].weather, { condition: 'WINDY' });
         } finally {
             if (oldSecret === undefined) delete process.env.JWT_ACCESS_SECRET; else process.env.JWT_ACCESS_SECRET = oldSecret;
         }
@@ -181,6 +332,37 @@ describe('Outfit HTTP auth boundary', () => {
             await new Promise((resolve) => setImmediate(resolve));
             const job = await service.getGenerationJob(1, created.body.result.jobId);
             assert.equal(job.status, 'completed');
+        } finally {
+            if (oldSecret === undefined) delete process.env.JWT_ACCESS_SECRET; else process.env.JWT_ACCESS_SECRET = oldSecret;
+        }
+    });
+    it('exposes active-job, revision, and saved-outfit trash routes through the JWT chain', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const app = createApp({ outfitService: service, healthCheck: async () => {} });
+        const oldSecret = process.env.JWT_ACCESS_SECRET;
+        process.env.JWT_ACCESS_SECRET = 'a-long-test-secret-that-is-at-least-32-chars';
+        try {
+            const token = jwt.sign({ sub: '1' }, process.env.JWT_ACCESS_SECRET, { algorithm: 'HS256' });
+            const auth = { authorization: `Bearer ${token}` };
+            const queued = await service.createGenerationJob(1, { closetItemIds: [4] });
+            const active = await request(app).get('/api/v1/outfits/generation-jobs/active').set(auth);
+            assert.equal(active.status, 200);
+            assert.equal(active.body.result.jobId, queued.jobId);
+            await service.processGenerationJob(queued.jobId);
+            const resultId = (await service.getGenerationJob(1, queued.jobId)).outfitResultId;
+
+            const revision = await request(app).post(`/api/v1/outfits/${resultId}/revisions`).set(auth).send({ replaceItemId: 4, newItemId: 5 });
+            assert.equal(revision.status, 200);
+            assert.equal(revision.body.result.parentOutfitResultId, resultId);
+            assert.equal(repository.jobs.find((job) => job.id === revision.body.result.jobId).closetItemIds[0], 5);
+            await new Promise((resolve) => setImmediate(resolve));
+
+            const saved = await service.saveOutfit(1, { outfitResultId: resultId, name: 'daily' });
+            assert.equal((await request(app).delete(`/api/v1/outfits/saved/${saved.id}`).set(auth)).status, 200);
+            const deleted = await request(app).get('/api/v1/outfits/saved/deleted').set(auth);
+            assert.equal(deleted.body.result.pagination.totalCount, 1);
+            assert.equal((await request(app).post(`/api/v1/outfits/saved/${saved.id}/restore`).set(auth)).status, 200);
         } finally {
             if (oldSecret === undefined) delete process.env.JWT_ACCESS_SECRET; else process.env.JWT_ACCESS_SECRET = oldSecret;
         }

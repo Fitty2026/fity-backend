@@ -1,5 +1,6 @@
 import app from './app.js';
 import { disconnectPrisma } from './config/prisma.js';
+import { OutfitWorker } from './workers/outfit.worker.js';
 
 const port = process.env.PORT || 3000;
 const configuredShutdownTimeoutMs = Number(process.env.SHUTDOWN_TIMEOUT_MS || 10000);
@@ -8,10 +9,12 @@ const shutdownTimeoutMs = Number.isFinite(configuredShutdownTimeoutMs) && config
     : 10000;
 let server;
 let shuttingDown = false;
+const outfitWorker = new OutfitWorker({ service: app.locals.outfitService });
 
 const shutdown = (signal) => {
     if (shuttingDown) return;
     shuttingDown = true;
+    outfitWorker.stop();
     console.log(`${signal} 신호를 받아 서버를 종료합니다.`);
 
     const forceExitTimer = setTimeout(() => {
@@ -49,6 +52,7 @@ process.once('SIGINT', () => shutdown('SIGINT'));
 
 try {
     await app.locals.imageService.reconcileStaleAssets();
+    outfitWorker.start();
     server = app.listen(port, () => {
         console.log(`Fitty Server is running on port ${port}`);
     });

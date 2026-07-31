@@ -104,6 +104,12 @@ jobs:
       - name: Verify migration state
         run: npx prisma migrate status
 
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Verify outfit lifecycle against MySQL
+        run: RUN_DB_INTEGRATION=1 node --test test/outfit-db.integration.test.js
+
   publish-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     needs:
