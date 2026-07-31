@@ -10,6 +10,8 @@ export const createClosetRouter = ({ closetService, authenticate }) => {
     router.get('/items', controller.getItems);
     router.get('/items/:itemId', controller.getItem);
     router.patch('/items/:itemId', controller.updateItem);
-    router.delete('/items/:itemId', controller.deleteItem);
+    router.delete('/items/:itemId', controller.deleteItem); 
+    router.post('/items/:itemId/restore', controller.restoreItem);
+    router.delete('/items/:itemId/permanent', controller.permanentDeleteItem);
     return router;
 };

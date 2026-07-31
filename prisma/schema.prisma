@@ -1,5 +1,6 @@
 datasource db {
   provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -197,6 +198,7 @@ model ClosetItem {
   size       String     @db.VarChar(60)
   category   String     @db.VarChar(60)
   importType String     @map("import_type") @db.VarChar(60)
+  deletedAt DateTime?
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
   user       User       @relation(fields: [userId], references: [id], onDelete: Restrict)
