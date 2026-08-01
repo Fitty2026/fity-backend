@@ -62,6 +62,10 @@ const closetItem = await request('/api/v1/closets/items', json('POST', {
 }, token));
 assert.ok(Number.isSafeInteger(closetItem.item_id));
 
+await request('/api/v1/users/onboarding/style', json('POST', {
+    styleTagIds: [1]
+}, token));
+
 const generation = await request('/api/v1/outfits/generation-jobs', json('POST', {
     closetItemIds: [closetItem.item_id],
     styleTagIds: [1]
