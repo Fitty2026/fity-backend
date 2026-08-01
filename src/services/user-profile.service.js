@@ -104,14 +104,37 @@ const stubBodyAnalysis = (imageId) => ({
     frameSize: FRAME_SIZE_ORDER[imageId % FRAME_SIZE_ORDER.length]
 });
 
+// 프론트(fity-frontend)는 문서상 계약(배열)이 아니라 { termsOfService, privacyPolicy, aiUsage, marketing }
+// 객체 형태로 agreements를 보낸다. 프론트를 고칠 수 없는 상황이라 백엔드에서 두 형태를 모두 받아준다.
+const LEGACY_AGREEMENT_KEY_TARGETS = {
+    termsOfService: 'TERMS_OF_SERVICE',
+    privacyPolicy: 'PRIVACY_POLICY',
+    aiUsage: 'AI_USAGE',
+    marketing: 'MARKETING'
+};
+
+const normalizeAgreements = (raw) => {
+    if (Array.isArray(raw)) {
+        return raw;
+    }
+    if (raw && typeof raw === 'object') {
+        return Object.entries(raw).map(([key, isAgreed]) => ({
+            target: LEGACY_AGREEMENT_KEY_TARGETS[key],
+            isAgreed
+        }));
+    }
+    return null;
+};
+
 const agreementInput = (payload) => {
     const keys = Object.keys(payload).filter((key) => key !== 'userId');
-    if (keys.length !== 1 || keys[0] !== 'agreements' || !Array.isArray(payload.agreements) || payload.agreements.length === 0) {
+    const agreementsInput = keys.length === 1 && keys[0] === 'agreements' ? normalizeAgreements(payload.agreements) : null;
+    if (!Array.isArray(agreementsInput) || agreementsInput.length === 0) {
         throw problem(400, 'AGREEMENT4001', 'agreements 배열을 전달해야 합니다.');
     }
 
     const seen = new Set();
-    const agreements = payload.agreements.map((entry) => {
+    const agreements = agreementsInput.map((entry) => {
         const target = entry?.target;
         const isAgreed = entry?.isAgreed;
         if (!AGREEMENT_TARGETS.has(target) || typeof isAgreed !== 'boolean') {

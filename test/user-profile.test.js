@@ -347,3 +347,16 @@ test('agreements require the mandatory targets and persist a consent log entry p
     assert.equal(invalidTarget.status, 400);
     assert.equal(invalidTarget.body.code, 'AGREEMENT4002');
 });
+
+test('agreements accepts the frontend legacy object shape as well as the documented array shape', async () => {
+    const saved = await api.post('/api/v1/users/agreements').set('x-test-user-id', '7').send({
+        agreements: { termsOfService: true, privacyPolicy: true, aiUsage: false, marketing: true }
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(prisma.state.consentLogs.filter((log) => log.userId === 7).slice(-4).map(({ target, isAgreed }) => ({ target, isAgreed })), [
+        { target: 'TERMS_OF_SERVICE', isAgreed: true },
+        { target: 'PRIVACY_POLICY', isAgreed: true },
+        { target: 'AI_USAGE', isAgreed: false },
+        { target: 'MARKETING', isAgreed: true }
+    ]);
+});
