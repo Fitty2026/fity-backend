@@ -11,14 +11,16 @@
   "agreements": [
     { "target": "TERMS_OF_SERVICE", "isAgreed": true },
     { "target": "PRIVACY_POLICY", "isAgreed": true },
+    { "target": "AI_USAGE", "isAgreed": false },
     { "target": "MARKETING", "isAgreed": false }
   ]
 }
 ```
 
-- `target`은 `TERMS_OF_SERVICE`, `PRIVACY_POLICY`, `MARKETING` 중 하나이며 중복될 수 없습니다.
+- 하위 호환: `agreements`에 `{ termsOfService, privacyPolicy, aiUsage, marketing }` 형태의 객체를 보내도 위와 동일하게 처리합니다(현재 fity-frontend가 이 형태로 전송 중). 신규 연동은 위 배열 형태를 사용하세요.
+- `target`은 `TERMS_OF_SERVICE`, `PRIVACY_POLICY`, `AI_USAGE`, `MARKETING` 중 하나이며 중복될 수 없습니다.
 - `TERMS_OF_SERVICE`, `PRIVACY_POLICY`는 필수 동의 항목이며 `isAgreed: true`가 아니면 `AGREEMENT4003`으로 거부합니다.
-- `MARKETING`은 선택 항목으로 `isAgreed: false`도 허용합니다.
+- `AI_USAGE`, `MARKETING`은 선택 항목으로 `isAgreed: false`도 허용합니다. (`AI_USAGE`는 프론트 온보딩 화면에 이미 존재하던 항목을 임시로 계약에 포함시킨 것 — 후속 이슈에서 정식 정책 재검토 필요)
 - 각 항목은 `consent_logs`에 사용자 ID·target·동의 여부의 이력으로 저장됩니다.
 - 성공 응답은 `result: null`입니다.
 
