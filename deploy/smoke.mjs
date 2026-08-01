@@ -66,6 +66,12 @@ await request('/api/v1/users/onboarding/style', json('POST', {
     styleTagIds: [1]
 }, token));
 
+await request('/api/v1/body-profiles/type', json('POST', {
+    bodyBalance: 'BALANCED',
+    shoulderWidth: 'AVERAGE',
+    frameSize: 'MEDIUM'
+}, token));
+
 const generation = await request('/api/v1/outfits/generation-jobs', json('POST', {
     closetItemIds: [closetItem.item_id],
     styleTagIds: [1]
