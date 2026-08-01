@@ -5,7 +5,9 @@ const BODY_BALANCE_VALUES = new Set(['UPPER_BODY_DEVELOPED', 'BALANCED', 'LOWER_
 const SHOULDER_WIDTH_VALUES = new Set(['NARROW', 'AVERAGE', 'WIDE']);
 const FRAME_SIZE_VALUES = new Set(['SMALL', 'MEDIUM', 'LARGE']);
 const REQUIRED_AGREEMENT_TARGETS = new Set(['TERMS_OF_SERVICE', 'PRIVACY_POLICY']);
-const OPTIONAL_AGREEMENT_TARGETS = new Set(['MARKETING']);
+// AI_USAGE는 원래 계약에 없었으나 프론트가 이미 4개 항목(termsOfService/privacyPolicy/aiUsage/marketing)을
+// 보내고 있어 온보딩이 막히는 문제를 임시로 막기 위해 선택 항목으로 추가함. 후속 이슈에서 계약을 재정리할 것.
+const OPTIONAL_AGREEMENT_TARGETS = new Set(['MARKETING', 'AI_USAGE']);
 const AGREEMENT_TARGETS = new Set([...REQUIRED_AGREEMENT_TARGETS, ...OPTIONAL_AGREEMENT_TARGETS]);
 
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
