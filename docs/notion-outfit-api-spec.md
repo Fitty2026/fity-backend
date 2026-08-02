@@ -76,7 +76,7 @@
 }
 ```
 
-- `closetItemIds`: 필수, 본인 소유 옷장 아이템 ID 배열, 1개 이상
+- `closetItemIds`: 필수, 본인 소유 옷장 아이템 ID 배열, 1~3개
 - `styleTagIds`: 선택, USER-04 (`GET /api/v1/users/me`) 응답의 `styleTagIds`
 - `situation`: 선택, `DATE`, `WORK`, `SCHOOL`, `TRAVEL`
 - `selectedDate`: 선택, 실제 달력에 존재하는 `YYYY-MM-DD`. 과거·미래 범위 제한 없음

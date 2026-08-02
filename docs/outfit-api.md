@@ -28,7 +28,7 @@
 
 | 필드 | 필수 | 규칙 |
 | --- | --- | --- |
-| `closetItemIds` | Y | 인증 사용자가 소유한 옷장 아이템 ID, 1개 이상 |
+| `closetItemIds` | Y | 인증 사용자가 소유한 옷장 아이템 ID, 1~3개 |
 | `styleTagIds` | N | 사용자 프로필에 저장된 스타일 태그 ID |
 | `situation` | N | `DATE`, `WORK`, `SCHOOL`, `TRAVEL` |
 | `selectedDate` | N | 실제 달력에 존재하는 `YYYY-MM-DD`, 과거·미래 범위 제한 없음 |

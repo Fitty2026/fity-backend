@@ -13,8 +13,11 @@ const positiveId = (value, field) => {
     return id;
 };
 
-const normalizeIds = (value, field, { required = false } = {}) => {
+const normalizeIds = (value, field, { required = false, maximum } = {}) => {
     if (value == null && !required) return [];
+    if (Array.isArray(value) && maximum && value.length > maximum) {
+        throw httpError(400, 'REQUEST400', `${field} must contain ${maximum} IDs or fewer.`);
+    }
     if (!Array.isArray(value) || (required && value.length === 0)
         || !value.every((id) => Number.isSafeInteger(id) && id > 0)) {
         throw httpError(400, 'REQUEST400', `${field} must be an array of positive integer IDs.`);
@@ -156,7 +159,7 @@ export class OutfitService {
     }
 
     async createGenerationJob(userId, input = {}) {
-        const closetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { required: true });
+        const closetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { required: true, maximum: 3 });
         const styleTagIds = normalizeIds(input.styleTagIds, 'styleTagIds');
         const situation = normalizeOptionalEnum(input.situation, 'situation', SITUATIONS);
         const selectedDate = normalizeSelectedDate(input.selectedDate);

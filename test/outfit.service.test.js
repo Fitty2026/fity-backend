@@ -86,6 +86,7 @@ describe('OutfitService', () => {
     });
     it('validates situation, date, and weather values', async () => {
         const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
+        await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4, 5, 6, 7] }), { code: 'REQUEST400' });
         await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], situation: 'PARTY' }), { code: 'REQUEST400' });
         await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], selectedDate: '2026-02-30' }), { code: 'REQUEST400' });
         await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4], weather: { condition: 'CLOUDLY' } }), { code: 'REQUEST400' });
