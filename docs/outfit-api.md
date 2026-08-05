@@ -30,7 +30,7 @@
 | 필드 | 필수 | 규칙 |
 | --- | --- | --- |
 | `closetItemIds` | Y | 인증 사용자가 소유한 옷장 아이템 ID, 1~3개 |
-| `styleTagIds` | N | 사용자 프로필에 저장된 스타일 태그 ID |
+| `styleTagIds` | N | 사용자 프로필에 저장된 스타일 태그 ID. 생략하면 서버가 현재 저장된 선호를 사용 |
 | `situation` | N | `DATE`, `WORK`, `SCHOOL`, `TRAVEL` |
 | `selectedDate` | N | 실제 달력에 존재하는 `YYYY-MM-DD`, 과거·미래 범위 제한 없음 |
 | `weather` | N | 날씨 객체 |
@@ -94,7 +94,7 @@
 }
 ```
 
-완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `modelVersion`, `promptVersion`, `fallbackUsed`, `recommendedClosetItemIds`가 포함됩니다. 진행 중 작업이 생성 후 10분을 초과하면 `expired/JOB_TIMEOUT`, 미저장 완료 결과가 24시간을 초과하면 `expired/RESULT_EXPIRED`로 전환됩니다.
+완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `modelVersion`, `promptVersion`, `fallbackUsed`, `outfitItems`, `recommendedClosetItemIds`가 포함됩니다. `outfitItems`는 `{ slot, itemId }` 배열이며 fallback 또는 기존 결과에서는 `null`일 수 있습니다. 진행 중 작업이 생성 후 10분을 초과하면 `expired/JOB_TIMEOUT`, 미저장 완료 결과가 24시간을 초과하면 `expired/RESULT_EXPIRED`로 전환됩니다.
 
 두 만료 모두 HTTP 오류가 아니라 `COMMON200` 정상 조회 응답으로 반환합니다. FE는 `status: expired`에서 `failure.code`를 확인해 진행 시간 초과와 결과 보관 만료를 구분합니다.
 
@@ -239,7 +239,7 @@ soft delete되지 않은 본인 소유 코디 한 건을 SAVED-02 항목과 같�
 
 `POST /api/v1/outfits/internal/generation-jobs/:jobId/process`
 
-내부 요청은 `x-internal-token: <INTERNAL_WORKER_TOKEN>`이 필요합니다. 서버는 요청 직후 비동기 처리를 시작하며, 별도 polling worker가 DB의 유효한 `QUEUED` 작업을 다시 수거합니다. 따라서 요청 직후 프로세스가 재시작되어도 DB에 남은 작업을 복구할 수 있습니다.
+내부 요청은 `x-internal-token: <INTERNAL_WORKER_TOKEN>`이 필요합니다. 공개 생성 API는 DB에 `QUEUED` 작업을 저장하는 데까지만 담당하며, polling worker가 작업을 수거해 처리합니다. 따라서 HTTP 요청 처리 중 AI 작업을 실행하지 않고, 프로세스가 재시작되어도 DB에 남은 작업을 복구할 수 있습니다.
 
 - `OUTFIT_WORKER_POLL_INTERVAL_MS`: polling 주기, 기본 1000ms
 - `OUTFIT_WORKER_BATCH_SIZE`: 한 번에 조회할 작업 수, 기본 5, 최대 20
@@ -261,3 +261,11 @@ soft delete되지 않은 본인 소유 코디 한 건을 SAVED-02 항목과 같�
 | 409 | `ITEM_NOT_COMPATIBLE` | 교체 아이템 category 불일치 |
 
 상태 내부 오류인 `JOB_TIMEOUT`, `RESULT_EXPIRED`, `AI_GENERATION_FAILED`는 OUTFIT-02의 `failure.code`로 반환합니다.
+
+## AI 연동 전 계약
+
+- 생성·재생성 job에는 작업 생성 시점의 파생 체형 프로필, 저장된 스타일 선호, 선택 아이템, 활성 옷장 pool, 상황·날짜·날씨를 `inputSnapshot`으로 영속 저장합니다.
+- `styleTagIds`를 생략하면 JWT 사용자의 저장된 스타일 선호를 서버가 조회해 snapshot에 포함합니다.
+- snapshot은 내부 worker와 AI adapter 사이의 입력 계약이며 공개 응답에는 원본 이미지나 내부 저장소 키를 노출하지 않습니다.
+- AI 응답은 `outfitItems: [{ slot, itemId }]`를 사용할 수 있으며, 중복 slot·잘못된 ID·비소유 아이템은 거부하고 fallback 경계로 전환합니다. 기존 FE 호환을 위해 `recommendedClosetItemIds`도 함께 유지합니다.
+- 공개 API 계약 원본은 `docs/openapi.json`이며 테스트에서 실제 공개 route, JWT, enum과 입력 개수 제한을 검증합니다.

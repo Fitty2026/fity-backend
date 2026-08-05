@@ -81,7 +81,7 @@
 ```
 
 - `closetItemIds`: 필수, 본인 소유 옷장 아이템 ID 배열, 1~3개
-- `styleTagIds`: 선택, USER-04 (`GET /api/v1/users/me`) 응답의 `styleTagIds`
+- `styleTagIds`: 선택, USER-04 (`GET /api/v1/users/me`) 응답의 `styleTagIds`. 생략하면 BE가 저장된 선호를 사용
 - `situation`: 선택, `DATE`, `WORK`, `SCHOOL`, `TRAVEL`
 - `selectedDate`: 선택, 실제 달력에 존재하는 `YYYY-MM-DD`. 과거·미래 범위 제한 없음
 - `weather`: 선택
@@ -160,7 +160,8 @@
 - 정상 순서: `queued(5) -> processing(70) -> qc_pending(90) -> completed(100)`
 - 종료 상태: `completed`, `failed`, `expired`
 - FE polling 권장 주기: 2초
-- 완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `modelVersion`, `promptVersion`, `fallbackUsed`, `recommendedClosetItemIds` 포함
+- 완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `modelVersion`, `promptVersion`, `fallbackUsed`, `outfitItems`, `recommendedClosetItemIds` 포함
+- `outfitItems`는 `{ slot, itemId }` 배열이며 fallback 또는 기존 결과에서는 `null` 가능
 - 10분 초과 진행 작업: `expired`, `failure.code: JOB_TIMEOUT`
 - 24시간 초과 미저장 결과: `expired`, `failure.code: RESULT_EXPIRED`
 - 두 만료 모두 HTTP 오류가 아닌 `COMMON200` 정상 응답이며 `failure.code`로 원인을 구분

@@ -57,9 +57,43 @@ export class OutfitRepository {
 
     async findOwnedStyleTagIds(userId, styleTagIds) {
         const preferences = await this.prisma.userStylePreference.findMany({
-            where: { userId, styleTagId: { in: styleTagIds } }, select: { styleTagId: true }
+            where: { userId, ...(styleTagIds ? { styleTagId: { in: styleTagIds } } : {}) },
+            select: { styleTagId: true }
         });
         return preferences.map((preference) => preference.styleTagId);
+    }
+
+    async findGenerationContext(userId, selectedItemIds, styleTagIds) {
+        const [bodyProfile, closetItemPool, stylePreferences] = await Promise.all([
+            this.prisma.bodyProfile.findFirst({
+                where: { userId },
+                select: { id: true, bodyBalance: true, shoulderWidth: true, frameSize: true }
+            }),
+            this.prisma.closetItem.findMany({
+                where: {
+                    userId,
+                    deletedAt: null,
+                    imageAsset: { is: { status: 'ACTIVE', deletedAt: null } }
+                },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    tags: { select: { tagName: true } },
+                    imageAsset: { select: { id: true, mimeType: true } }
+                }
+            }),
+            this.prisma.userStylePreference.findMany({
+                where: { userId, styleTagId: { in: styleTagIds } },
+                orderBy: { styleTag: { displayOrder: 'asc' } },
+                include: { styleTag: { select: { id: true, code: true, name: true } } }
+            })
+        ]);
+        const selectedIdSet = new Set(selectedItemIds);
+        return {
+            bodyProfile,
+            selectedItems: closetItemPool.filter((item) => selectedIdSet.has(item.id)),
+            closetItemPool,
+            stylePreferences: stylePreferences.map((preference) => preference.styleTag)
+        };
     }
 
     findJobByIdempotencyKey(userId, idempotencyKey) {
@@ -155,6 +189,7 @@ export class OutfitRepository {
                 userId: job.userId, generationJobId: job.id, generatedImageUrl: aiResult.generatedImageUrl,
                 provider: aiResult.provider, modelVersion: aiResult.modelVersion,
                 promptVersion: aiResult.promptVersion, fallbackUsed: aiResult.fallbackUsed,
+                ...(aiResult.outfitItems ? { outfitItems: aiResult.outfitItems } : {}),
                 recommendedClosetItemIds: aiResult.recommendedClosetItemIds
             } });
             const updated = await tx.outfitGenerationJob.updateMany({

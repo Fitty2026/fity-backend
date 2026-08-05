@@ -7,10 +7,6 @@ export const createGenerationJob = async (req, res, next) => {
             req.body,
             req.get('idempotency-key')
         );
-        if (!job.isExistingJob) setImmediate(() => {
-            req.app.locals.outfitService.processGenerationJob(job.jobId)
-                .catch((error) => console.error('Outfit background processing failed.', error));
-        });
         return sendResponse(res, job, 'Outfit generation job was created.');
     } catch (error) {
         return next(error);
@@ -26,10 +22,6 @@ export const createRevision = async (req, res, next) => {
             req.body,
             req.get('idempotency-key')
         );
-        setImmediate(() => {
-            req.app.locals.outfitService.processGenerationJob(revision.jobId)
-                .catch((error) => console.error('Outfit revision processing failed.', error));
-        });
         return sendResponse(res, revision, 'Outfit revision job was created.');
     } catch (error) { return next(error); }
 };
