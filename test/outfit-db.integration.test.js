@@ -52,6 +52,8 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
                 generate: async () => ({
                     generatedImageUrl: 'https://images.example.com/integration-outfit.png',
                     provider: 'integration-test',
+                    modelVersion: 'integration-v1',
+                    promptVersion: null,
                     fallbackUsed: false,
                     recommendedClosetItemIds: [closetItem.id]
                 })

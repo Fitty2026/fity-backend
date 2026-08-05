@@ -8,6 +8,7 @@
 - 요청의 `userId`, `bodyProfileId`는 인증 및 소유권 판단에 사용하지 않습니다.
 - 성공 및 실패 응답은 `{ isSuccess, code, message, result }` 공통 형식을 사용합니다.
 - 다른 사용자의 리소스는 소유권 노출 방지를 위해 `NOT_FOUND404`로 응답할 수 있습니다.
+- 생성 및 재생성 POST는 `Idempotency-Key` 헤더를 지원합니다. 네트워크 재시도에는 같은 키와 같은 body를 사용하며, 같은 키를 다른 body에 재사용하면 `CONFLICT409`를 반환합니다.
 
 ## OUTFIT-01 코디 생성 요청
 
@@ -57,6 +58,7 @@
   "jobId": 31,
   "status": "queued",
   "progress": 5,
+  "inputSchemaVersion": "outfit-input-v1",
   "isExistingJob": false,
   "input": {
     "closetItemIds": [21, 24],
@@ -82,6 +84,7 @@
   "jobId": 31,
   "status": "processing",
   "progress": 70,
+  "inputSchemaVersion": "outfit-input-v1",
   "expiresAt": "2026-07-31T12:10:00.000Z",
   "outfitResultId": null,
   "generatedImage": null,
@@ -91,7 +94,7 @@
 }
 ```
 
-완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `fallbackUsed`, `recommendedClosetItemIds`가 포함됩니다. 진행 중 작업이 생성 후 10분을 초과하면 `expired/JOB_TIMEOUT`, 미저장 완료 결과가 24시간을 초과하면 `expired/RESULT_EXPIRED`로 전환됩니다.
+완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `modelVersion`, `promptVersion`, `fallbackUsed`, `recommendedClosetItemIds`가 포함됩니다. 진행 중 작업이 생성 후 10분을 초과하면 `expired/JOB_TIMEOUT`, 미저장 완료 결과가 24시간을 초과하면 `expired/RESULT_EXPIRED`로 전환됩니다.
 
 두 만료 모두 HTTP 오류가 아니라 `COMMON200` 정상 조회 응답으로 반환합니다. FE는 `status: expired`에서 `failure.code`를 확인해 진행 시간 초과와 결과 보관 만료를 구분합니다.
 
@@ -173,7 +176,7 @@ FE 권장 polling 주기는 2초입니다. `completed`, `failed`, `expired`에�
 - `size`: 1~50 정수, 기본 10
 - soft delete되지 않은 본인 코디만 최신순으로 반환합니다.
 
-각 항목에는 `id`, `savedOutfitId`, `outfitResultId`, `name`, `imageUrl`, `items`, `styleTags`, `tags`, `memo`, `createdAt`, `updatedAt`, `deletedAt`, `isSaved`가 포함됩니다.
+각 항목에는 `id`, `savedOutfitId`, `outfitResultId`, `name`, `imageUrl`, `modelVersion`, `promptVersion`, `items`, `styleTags`, `tags`, `memo`, `createdAt`, `updatedAt`, `deletedAt`, `isSaved`가 포함됩니다.
 
 ## SAVED-03 저장 코디 상세
 
@@ -240,7 +243,9 @@ soft delete되지 않은 본인 소유 코디 한 건을 SAVED-02 항목과 같�
 
 - `OUTFIT_WORKER_POLL_INTERVAL_MS`: polling 주기, 기본 1000ms
 - `OUTFIT_WORKER_BATCH_SIZE`: 한 번에 조회할 작업 수, 기본 5, 최대 20
+- `OUTFIT_CLEANUP_INTERVAL_MS`: 10분 초과 진행 작업과 24시간 초과 미저장 결과를 정리하는 주기, 기본 60000ms
 - 원자적 `QUEUED -> PROCESSING` 전환으로 여러 worker가 같은 작업을 중복 처리하지 않습니다.
+- soft delete된 저장 코디도 영구 삭제 전까지 저장 결과로 간주하여 24시간 만료 대상에서 제외합니다.
 - AI 호출이 실패하거나 응답이 잘못되면 정적 fallback 결과를 저장합니다.
 - AI 및 fallback 결과 저장 자체가 실패하면 job을 `failed`로 전환합니다.
 

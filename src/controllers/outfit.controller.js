@@ -2,7 +2,11 @@ import { sendResponse } from '../middlewares/response.middleware.js';
 
 export const createGenerationJob = async (req, res, next) => {
     try {
-        const job = await req.app.locals.outfitService.createGenerationJob(req.auth.userId, req.body);
+        const job = await req.app.locals.outfitService.createGenerationJob(
+            req.auth.userId,
+            req.body,
+            req.get('idempotency-key')
+        );
         if (!job.isExistingJob) setImmediate(() => {
             req.app.locals.outfitService.processGenerationJob(job.jobId)
                 .catch((error) => console.error('Outfit background processing failed.', error));
@@ -16,7 +20,12 @@ export const getGenerationJob = async (req, res, next) => { try { return sendRes
 export const getActiveGenerationJob = async (req, res, next) => { try { return sendResponse(res, await req.app.locals.outfitService.getActiveGenerationJob(req.auth.userId)); } catch (error) { return next(error); } };
 export const createRevision = async (req, res, next) => {
     try {
-        const revision = await req.app.locals.outfitService.createRevision(req.auth.userId, req.params.outfitResultId, req.body);
+        const revision = await req.app.locals.outfitService.createRevision(
+            req.auth.userId,
+            req.params.outfitResultId,
+            req.body,
+            req.get('idempotency-key')
+        );
         setImmediate(() => {
             req.app.locals.outfitService.processGenerationJob(revision.jobId)
                 .catch((error) => console.error('Outfit revision processing failed.', error));

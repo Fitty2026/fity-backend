@@ -36,4 +36,30 @@ describe('OutfitWorker', () => {
         assert.equal(errors.length, 1);
         assert.equal(calls, 2);
     });
+
+    it('runs expiration cleanup on its own interval without blocking job polling after cleanup errors', async () => {
+        let timestamp = 1000;
+        let cleanupCalls = 0;
+        let pollingCalls = 0;
+        const errors = [];
+        const worker = new OutfitWorker({
+            service: {
+                cleanupExpiredJobs: async () => { cleanupCalls += 1; if (cleanupCalls === 2) throw new Error('cleanup failed'); },
+                processPendingJobs: async () => { pollingCalls += 1; }
+            },
+            cleanupIntervalMs: 60000,
+            now: () => timestamp,
+            logger: { error: (...args) => errors.push(args) }
+        });
+
+        await worker.tick();
+        timestamp += 1000;
+        await worker.tick();
+        timestamp += 60000;
+        await worker.tick();
+
+        assert.equal(cleanupCalls, 2);
+        assert.equal(pollingCalls, 3);
+        assert.equal(errors.length, 1);
+    });
 });

@@ -26,9 +26,13 @@
 
 ```json
 {
-  "Authorization": "Bearer <JWT_TOKEN>"
+  "Authorization": "Bearer <JWT_TOKEN>",
+  "Idempotency-Key": "<UNIQUE_REQUEST_KEY>"
 }
 ```
+
+- `Idempotency-Key`는 OUTFIT-01과 OUTFIT-04에서 선택 사용합니다. 재시도 시 같은 key와 body를 사용합니다.
+- 같은 key를 다른 요청 body에 재사용하면 `409 CONFLICT409`입니다.
 
 ### Success format
 
@@ -97,6 +101,7 @@
     "jobId": 31,
     "status": "queued",
     "progress": 5,
+    "inputSchemaVersion": "outfit-input-v1",
     "isExistingJob": false,
     "input": {
       "closetItemIds": [21, 24],
@@ -141,6 +146,7 @@
     "jobId": 31,
     "status": "processing",
     "progress": 70,
+    "inputSchemaVersion": "outfit-input-v1",
     "expiresAt": "2026-07-31T12:10:00.000Z",
     "outfitResultId": null,
     "generatedImage": null,
@@ -154,7 +160,7 @@
 - 정상 순서: `queued(5) -> processing(70) -> qc_pending(90) -> completed(100)`
 - 종료 상태: `completed`, `failed`, `expired`
 - FE polling 권장 주기: 2초
-- 완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `fallbackUsed`, `recommendedClosetItemIds` 포함
+- 완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `modelVersion`, `promptVersion`, `fallbackUsed`, `recommendedClosetItemIds` 포함
 - 10분 초과 진행 작업: `expired`, `failure.code: JOB_TIMEOUT`
 - 24시간 초과 미저장 결과: `expired`, `failure.code: RESULT_EXPIRED`
 - 두 만료 모두 HTTP 오류가 아닌 `COMMON200` 정상 응답이며 `failure.code`로 원인을 구분
@@ -202,6 +208,8 @@
     "outfitResultId": 9,
     "name": "주말 데일리룩",
     "imageUrl": "https://example.com/outfit.png",
+    "modelVersion": "outfit-v1.0.0",
+    "promptVersion": null,
     "items": [21, 24],
     "styleTags": [1, 3],
     "tags": ["데이트", "여름"],

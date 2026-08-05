@@ -62,6 +62,16 @@ export class OutfitRepository {
         return preferences.map((preference) => preference.styleTagId);
     }
 
+    findJobByIdempotencyKey(userId, idempotencyKey) {
+        return this.prisma.outfitGenerationJob.findFirst({
+            where: { userId, idempotencyKey },
+            include: {
+                revision: true,
+                result: { include: { savedOutfits: { select: { id: true } } } }
+            }
+        });
+    }
+
     findActiveBodyProfile(userId) {
         return this.prisma.bodyProfile.findFirst({ where: { userId }, select: { id: true } });
     }
@@ -69,7 +79,7 @@ export class OutfitRepository {
     findJob(userId, id) {
         return this.prisma.outfitGenerationJob.findFirst({
             where: { id, userId },
-            include: { result: { include: { savedOutfits: { where: { deletedAt: null }, select: { id: true } } } } }
+            include: { revision: true, result: { include: { savedOutfits: { select: { id: true } } } } }
         });
     }
 
@@ -102,7 +112,25 @@ export class OutfitRepository {
             where: {
                 id,
                 status: 'COMPLETED',
-                result: { savedOutfits: { none: { deletedAt: null } } }
+                result: { savedOutfits: { none: {} } }
+            },
+            data: { status: 'EXPIRED', failureCode: 'RESULT_EXPIRED', failureReason: 'Unsaved outfit result expired.' }
+        });
+    }
+
+    expireAllStaleActiveJobs(now = new Date()) {
+        return this.prisma.outfitGenerationJob.updateMany({
+            where: { status: { in: ['QUEUED', 'PROCESSING', 'QC_PENDING'] }, expiresAt: { lte: now } },
+            data: { status: 'EXPIRED', failureCode: 'JOB_TIMEOUT', failureReason: 'Outfit generation job expired.', completedAt: now }
+        });
+    }
+
+    expireAllCompletedJobs(cutoff) {
+        return this.prisma.outfitGenerationJob.updateMany({
+            where: {
+                status: 'COMPLETED',
+                completedAt: { lte: cutoff },
+                result: { savedOutfits: { none: {} } }
             },
             data: { status: 'EXPIRED', failureCode: 'RESULT_EXPIRED', failureReason: 'Unsaved outfit result expired.' }
         });
@@ -125,7 +153,8 @@ export class OutfitRepository {
         return this.prisma.$transaction(async (tx) => {
             const result = await tx.outfitResult.create({ data: {
                 userId: job.userId, generationJobId: job.id, generatedImageUrl: aiResult.generatedImageUrl,
-                provider: aiResult.provider, fallbackUsed: aiResult.fallbackUsed,
+                provider: aiResult.provider, modelVersion: aiResult.modelVersion,
+                promptVersion: aiResult.promptVersion, fallbackUsed: aiResult.fallbackUsed,
                 recommendedClosetItemIds: aiResult.recommendedClosetItemIds
             } });
             const updated = await tx.outfitGenerationJob.updateMany({
