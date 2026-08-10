@@ -4,7 +4,7 @@
 
 ## 서버 파일
 
-- `.env`: 실제 secret, 현재 `IMAGE_REF`, `APP_VERSION`을 포함하며 mode 600
+- `.env`: 실제 secret, 현재 `IMAGE_REF`, `APP_VERSION`, 배포된 프런트 빌드의 `FRONTEND_COMMIT_SHA`를 포함하며 mode 600
 - `.docker/config.json`: Fitty GHCR pull 전용 credential
 - `docker-compose.yml`: `api`, `migrate`, `db`
 - `api.network.env`: DockerNetworkAutoSettings 입력
