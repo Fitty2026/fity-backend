@@ -1,5 +1,6 @@
 import express from 'express';
 import { createUserProfileController } from '../controllers/user-profile.controller.js';
+import { uploadBodyProfileImages } from '../middlewares/image-upload.middleware.js';
 
 export const createUserProfileRouter = ({ userProfileService, authenticate }) => {
     const router = express.Router();
@@ -13,6 +14,7 @@ export const createUserProfileRouter = ({ userProfileService, authenticate }) =>
     router.post('/users/onboarding/style', controller.saveOnboardingStyles);
     router.get('/body-profiles/me', controller.getBodyProfile);
     router.post('/body-profiles/type', controller.saveBodyType);
-    router.post('/body-profiles/analyze', controller.analyzeBodyProfile);
+    router.post('/body-profiles/analyze', uploadBodyProfileImages, controller.analyzeBodyProfile);
+    router.post('/body-profiles', controller.saveBodyProfile);
     return router;
 };
