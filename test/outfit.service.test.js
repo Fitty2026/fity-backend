@@ -132,6 +132,29 @@ describe('OutfitService', () => {
             { code: 'CONFLICT409' }
         );
     });
+    it('treats reordered ID arrays as the same idempotent generation request', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const first = await service.createGenerationJob(1, { closetItemIds: [4, 6], styleTagIds: [2] }, 'generation-order');
+        const retry = await service.createGenerationJob(1, { closetItemIds: [6, 4], styleTagIds: [2] }, 'generation-order');
+        assert.equal(retry.jobId, first.jobId);
+        assert.equal(retry.isExistingJob, true);
+    });
+    it('returns CONFLICT409 when a concurrent generation request claims the same key with different input', async () => {
+        const repository = new MemoryOutfitRepository();
+        repository.createOrFindActiveJob = async (data, now) => {
+            repository.jobs.push({
+                id: repository.next++, status: 'QUEUED', createdAt: new Date(now), completedAt: null,
+                failureCode: null, failureReason: null, result: null, ...data, closetItemIds: [5]
+            });
+            const error = new Error('duplicate idempotency key'); error.code = 'P2002'; throw error;
+        };
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        await assert.rejects(
+            () => service.createGenerationJob(1, { closetItemIds: [4] }, 'generation-race'),
+            { status: 409, code: 'CONFLICT409' }
+        );
+    });
     it('validates situation, date, and weather values', async () => {
         const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
         await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4, 5, 6, 7] }), { code: 'REQUEST400' });
@@ -144,6 +167,11 @@ describe('OutfitService', () => {
         assert.equal(windy.input.weather.condition, 'WINDY');
         assert.equal(windy.input.weather.temperature, undefined);
         assert.equal(windy.input.selectedDate, '1999-12-31');
+    });
+    it('accepts exactly three closet items', async () => {
+        const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4, 5, 6] });
+        assert.deepEqual(created.input.closetItemIds, [4, 5, 6]);
     });
     it('expires a stalled active job after ten minutes', async () => {
         const repository = new MemoryOutfitRepository();
@@ -277,6 +305,30 @@ describe('OutfitService', () => {
         await assert.rejects(
             () => service.createRevision(1, resultId, { replaceItemId: 4, newItemId: 6 }, 'revision-1'),
             { code: 'CONFLICT409' }
+        );
+    });
+    it('returns CONFLICT409 when a concurrent revision request claims the same key with different input', async () => {
+        const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
+        const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
+        let lookupCount = 0;
+        const originalLookup = repository.findJobByIdempotencyKey.bind(repository);
+        repository.findJobByIdempotencyKey = async (...args) => (++lookupCount === 1 ? null : originalLookup(...args));
+        repository.createRevisionJob = async ({ job }, now) => {
+            const collision = {
+                id: repository.next++, status: 'QUEUED', createdAt: new Date(now), completedAt: null,
+                failureCode: null, failureReason: null, result: null, ...job
+            };
+            repository.jobs.push(collision);
+            repository.revisions.push({
+                id: repository.next++, userId: 1, generationJobId: collision.id,
+                sourceOutfitResultId: resultId, replaceItemId: 4, newItemId: 6
+            });
+            const error = new Error('duplicate idempotency key'); error.code = 'P2002'; throw error;
+        };
+        await assert.rejects(
+            () => service.createRevision(1, resultId, { replaceItemId: 4, newItemId: 5 }, 'revision-race'),
+            { status: 409, code: 'CONFLICT409' }
         );
     });
     it('automatically expires stalled and old unsaved jobs but preserves soft-deleted saved results', async () => {

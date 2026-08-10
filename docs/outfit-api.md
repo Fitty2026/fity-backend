@@ -8,7 +8,7 @@
 - 요청의 `userId`, `bodyProfileId`는 인증 및 소유권 판단에 사용하지 않습니다.
 - 성공 및 실패 응답은 `{ isSuccess, code, message, result }` 공통 형식을 사용합니다.
 - 다른 사용자의 리소스는 소유권 노출 방지를 위해 `NOT_FOUND404`로 응답할 수 있습니다.
-- 생성 및 재생성 POST는 `Idempotency-Key` 헤더를 지원합니다. 네트워크 재시도에는 같은 키와 같은 body를 사용하며, 같은 키를 다른 body에 재사용하면 `CONFLICT409`를 반환합니다.
+- 생성 및 재생성 POST는 `Idempotency-Key` 헤더를 지원합니다. 네트워크 재시도에는 같은 키와 같은 body를 사용하며, 같은 키를 다른 body에 재사용하면 `CONFLICT409`를 반환합니다. 키 공간은 두 엔드포인트가 공유하므로 생성과 재생성 요청에도 서로 다른 키를 사용합니다.
 
 ## OUTFIT-01 코디 생성 요청
 

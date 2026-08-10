@@ -145,8 +145,12 @@ const jobInput = (job) => ({
 });
 
 const sameJson = (left, right) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
-const matchesGenerationInput = (job, input) => sameJson(job.closetItemIds, input.closetItemIds)
-    && sameJson(job.styleTagIds, input.styleTagIds)
+const sameIds = (left, right) => sameJson(
+    [...(left ?? [])].sort((a, b) => a - b),
+    [...(right ?? [])].sort((a, b) => a - b)
+);
+const matchesGenerationInput = (job, input) => sameIds(job.closetItemIds, input.closetItemIds)
+    && sameIds(job.styleTagIds, input.styleTagIds)
     && (job.situation ?? null) === input.situation
     && (job.selectedDate ? new Date(job.selectedDate).toISOString().slice(0, 10) : null) === input.selectedDate
     && sameJson(job.weather, input.weather);
@@ -279,6 +283,9 @@ export class OutfitService {
                         created = { job: existing, isExistingJob: true };
                         break;
                     }
+                    if (existing) {
+                        throw httpError(409, 'CONFLICT409', 'Idempotency-Key was already used with a different outfit request.');
+                    }
                 }
                 if (error.code !== 'P2034' || attempt === 2) throw error;
             }
@@ -375,6 +382,9 @@ export class OutfitService {
                 if (existing?.revision && existing.revision.sourceOutfitResultId === outfitResultId
                     && existing.revision.replaceItemId === replaceItemId && existing.revision.newItemId === newItemId) {
                     return toRevision(existing, existing.revision);
+                }
+                if (existing) {
+                    throw httpError(409, 'CONFLICT409', 'Idempotency-Key was already used with a different outfit request.');
                 }
             }
             if (error.code === 'ACTIVE_JOB_EXISTS' || error.code === 'P2034') {

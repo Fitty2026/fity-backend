@@ -31,7 +31,7 @@
 }
 ```
 
-- `Idempotency-Key`는 OUTFIT-01과 OUTFIT-04에서 선택 사용합니다. 재시도 시 같은 key와 body를 사용합니다.
+- `Idempotency-Key`는 OUTFIT-01과 OUTFIT-04에서 선택 사용합니다. 재시도 시 같은 key와 body를 사용하며, 두 API가 키 공간을 공유하므로 서로 다른 요청에는 고유한 key를 사용합니다.
 - 같은 key를 다른 요청 body에 재사용하면 `409 CONFLICT409`입니다.
 
 ### Success format
