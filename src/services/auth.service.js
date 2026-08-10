@@ -3,7 +3,8 @@ import jwt from 'jsonwebtoken';
 
 const SALT_ROUNDS = 12;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const USERNAME_PATTERN = /^[a-z0-9]+$/;
+const USERNAME_PATTERN = /^[a-zA-Z0-9]+$/;
+const PASSWORD_PATTERN = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+~`|}{[\]:;?><,./-]).{8,72}$/;
 const SIGNUP_FIELDS = new Set(['name', 'loginId', 'email', 'password']);
 
 const createRequestError = (message, code = 'AUTH4001') => {
@@ -21,7 +22,7 @@ const createUnauthorizedError = () => {
 };
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
-const normalizeUsername = (value) => typeof value === 'string' ? value.trim().toLowerCase() : '';
+const normalizeUsername = (value) => typeof value === 'string' ? value.trim() : '';
 
 const uniqueConstraintTarget = (error) => {
     const directTarget = Array.isArray(error?.meta?.target)
@@ -46,23 +47,35 @@ const validateCredentials = ({ email, password, name }) => {
 };
 
 const validateSignupInput = (input) => {
-    const fields = Object.keys(input || {});
-    if (fields.some((field) => !SIGNUP_FIELDS.has(field))) {
-        throw createRequestError('회원가입 요청에 허용되지 않은 항목이 포함되어 있습니다.');
+    if (!input?.name) throw createRequestError('이름은 필수 입력 항목입니다.', 'SIGNUP400_01');
+    if (!input?.loginId) throw createRequestError('아이디는 필수 입력 항목입니다.', 'SIGNUP400_02');
+    if (!input?.email) throw createRequestError('이메일은 필수 입력 항목입니다.', 'SIGNUP400_03');
+    if (!input?.password) throw createRequestError('비밀번호는 필수 입력 항목입니다.', 'SIGNUP400_04');
+
+    const email = normalizeEmail(input.email);
+    if (!EMAIL_PATTERN.test(email) || email.length > 191) {
+        throw createRequestError('올바른 이메일 형식이 아닙니다.', 'SIGNUP400_05');
     }
 
-    const credentials = validateCredentials(input);
-    const username = normalizeUsername(input?.loginId);
-    const name = typeof input?.name === 'string' ? input.name.trim() : '';
-
-    if (username.length < 4 || username.length > 20 || !USERNAME_PATTERN.test(username)) {
-        throw createRequestError('아이디는 영문 소문자와 숫자로 이루어진 4~20자여야 합니다.');
-    }
-    if (!name || name.length > 191) {
-        throw createRequestError('이름은 1자 이상 191자 이하여야 합니다.');
+    if (!PASSWORD_PATTERN.test(input.password)) {
+        throw createRequestError('비밀번호는 영문, 숫자, 특수문자를 포함하여 8자 이상이어야 합니다.', 'SIGNUP400_06');
     }
 
-    return { ...credentials, username, name };
+    const username = normalizeUsername(input.loginId);
+    if (username.length < 4 || username.length > 30 || !USERNAME_PATTERN.test(username)) {
+        throw createRequestError('아이디는 영문(대소문자 무관) 및 숫자 4~30자여야 합니다.', 'SIGNUP400_07');
+    }
+
+    const name = input.name.trim();
+
+    return { email, password: input.password, username, name };
+};
+
+const validateLoginInput = (input) => {
+    if (!input?.email) throw createRequestError('이메일을 입력해 주세요.', 'LOGIN400_01');
+    if (!input?.password) throw createRequestError('비밀번호를 입력해 주세요.', 'LOGIN400_02');
+
+    return { email: normalizeEmail(input.email), password: input.password };
 };
 
 const getJwtConfig = () => {
@@ -108,7 +121,6 @@ export class AuthService {
                 if (target.includes('email')) {
                     throw createRequestError('이미 가입된 이메일 주소입니다.', 'SIGNUP409_01');
                 }
-                throw createRequestError('이미 사용 중인 이메일 또는 아이디입니다.', 'AUTH4093');
             }
             throw error;
         }
@@ -124,9 +136,19 @@ export class AuthService {
     async login(input) {
         const { email, password } = validateCredentials(input);
         const user = await this.repository.findByEmail(email);
-        if (!user?.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
-            throw createUnauthorizedError();
+        if (!user) {
+            const err = new Error('가입되지 않은 이메일 주소입니다.');
+            err.status = 401;
+            err.code = 'LOGIN401_01';
+            throw err;
         }
+        if (!user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
+            const err = new Error('비밀번호가 일치하지 않습니다.');
+            err.status = 401;
+            err.code = 'LOGIN401_02';
+            throw err;
+        }
+
         return this.createAuthResult(user);
     }
 
@@ -137,6 +159,6 @@ export class AuthService {
             subject: String(user.id),
             expiresIn
         });
-        return { accessToken, userId: user.id, nickname: user.name };
+        return { accessToken, userId: user.id, name: user.name };
     }
 }
