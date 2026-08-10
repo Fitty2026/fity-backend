@@ -345,9 +345,24 @@ describe('BE2 image asset API', () => {
     });
 
     it('reports the real database health result', async () => {
-        const healthy = await request(app).get('/health');
-        assert.equal(healthy.status, 200);
-        assert.equal(healthy.body.result.dbConnection_mysql, 'CONNECTED');
+        const previousAppVersion = process.env.APP_VERSION;
+        const expectedCommitSha = 'a'.repeat(40);
+        process.env.APP_VERSION = expectedCommitSha;
+
+        try {
+            const healthy = await request(app).get('/health');
+            assert.equal(healthy.status, 200);
+            assert.equal(healthy.body.result.appVersion, expectedCommitSha);
+            assert.equal(healthy.body.result.commitSha, expectedCommitSha);
+            assert.equal(healthy.body.result.commitShort, expectedCommitSha.slice(0, 7));
+            assert.equal(healthy.body.result.dbConnection_mysql, 'CONNECTED');
+        } finally {
+            if (previousAppVersion === undefined) {
+                delete process.env.APP_VERSION;
+            } else {
+                process.env.APP_VERSION = previousAppVersion;
+            }
+        }
 
         const failingApp = createApp({
             imageService,

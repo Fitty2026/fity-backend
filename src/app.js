@@ -91,10 +91,13 @@ export const createApp = ({
     app.get('/health', async (req, res, next) => {
         try {
             await healthCheck();
+            const commitSha = process.env.APP_VERSION || 'local';
             return sendResponse(res, {
                 uptime: process.uptime(),
                 timestamp: new Date().toISOString(),
-                appVersion: process.env.APP_VERSION || 'local',
+                appVersion: commitSha,
+                commitSha,
+                commitShort: commitSha.slice(0, 7),
                 dbConnection_mysql: 'CONNECTED'
             }, '서버 및 데이터베이스 상태: 정상');
         } catch (cause) {
