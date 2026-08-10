@@ -346,21 +346,33 @@ describe('BE2 image asset API', () => {
 
     it('reports the real database health result', async () => {
         const previousAppVersion = process.env.APP_VERSION;
-        const expectedCommitSha = 'a'.repeat(40);
-        process.env.APP_VERSION = expectedCommitSha;
+        const previousFrontendCommitSha = process.env.FRONTEND_COMMIT_SHA;
+        const expectedBackendCommitSha = 'a'.repeat(40);
+        const expectedFrontendCommitSha = 'b'.repeat(40);
+        process.env.APP_VERSION = expectedBackendCommitSha;
+        process.env.FRONTEND_COMMIT_SHA = expectedFrontendCommitSha;
 
         try {
             const healthy = await request(app).get('/health');
             assert.equal(healthy.status, 200);
-            assert.equal(healthy.body.result.appVersion, expectedCommitSha);
-            assert.equal(healthy.body.result.commitSha, expectedCommitSha);
-            assert.equal(healthy.body.result.commitShort, expectedCommitSha.slice(0, 7));
+            assert.equal(healthy.body.result.appVersion, expectedBackendCommitSha);
+            assert.equal(healthy.body.result.commitSha, expectedBackendCommitSha);
+            assert.equal(healthy.body.result.commitShort, expectedBackendCommitSha.slice(0, 7));
+            assert.equal(healthy.body.result.backendCommitSha, expectedBackendCommitSha);
+            assert.equal(healthy.body.result.backendCommitShort, expectedBackendCommitSha.slice(0, 7));
+            assert.equal(healthy.body.result.frontendCommitSha, expectedFrontendCommitSha);
+            assert.equal(healthy.body.result.frontendCommitShort, expectedFrontendCommitSha.slice(0, 7));
             assert.equal(healthy.body.result.dbConnection_mysql, 'CONNECTED');
         } finally {
             if (previousAppVersion === undefined) {
                 delete process.env.APP_VERSION;
             } else {
                 process.env.APP_VERSION = previousAppVersion;
+            }
+            if (previousFrontendCommitSha === undefined) {
+                delete process.env.FRONTEND_COMMIT_SHA;
+            } else {
+                process.env.FRONTEND_COMMIT_SHA = previousFrontendCommitSha;
             }
         }
 

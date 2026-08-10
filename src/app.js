@@ -91,13 +91,18 @@ export const createApp = ({
     app.get('/health', async (req, res, next) => {
         try {
             await healthCheck();
-            const commitSha = process.env.APP_VERSION || 'local';
+            const backendCommitSha = process.env.APP_VERSION || 'local';
+            const frontendCommitSha = process.env.FRONTEND_COMMIT_SHA || 'unknown';
             return sendResponse(res, {
                 uptime: process.uptime(),
                 timestamp: new Date().toISOString(),
-                appVersion: commitSha,
-                commitSha,
-                commitShort: commitSha.slice(0, 7),
+                appVersion: backendCommitSha,
+                commitSha: backendCommitSha,
+                commitShort: backendCommitSha.slice(0, 7),
+                backendCommitSha,
+                backendCommitShort: backendCommitSha.slice(0, 7),
+                frontendCommitSha,
+                frontendCommitShort: frontendCommitSha.slice(0, 7),
                 dbConnection_mysql: 'CONNECTED'
             }, '서버 및 데이터베이스 상태: 정상');
         } catch (cause) {
