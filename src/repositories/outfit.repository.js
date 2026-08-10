@@ -57,9 +57,53 @@ export class OutfitRepository {
 
     async findOwnedStyleTagIds(userId, styleTagIds) {
         const preferences = await this.prisma.userStylePreference.findMany({
-            where: { userId, styleTagId: { in: styleTagIds } }, select: { styleTagId: true }
+            where: { userId, ...(styleTagIds ? { styleTagId: { in: styleTagIds } } : {}) },
+            select: { styleTagId: true }
         });
         return preferences.map((preference) => preference.styleTagId);
+    }
+
+    async findGenerationContext(userId, selectedItemIds, styleTagIds) {
+        const [bodyProfile, closetItemPool, stylePreferences] = await Promise.all([
+            this.prisma.bodyProfile.findFirst({
+                where: { userId },
+                select: { id: true, bodyBalance: true, shoulderWidth: true, frameSize: true }
+            }),
+            this.prisma.closetItem.findMany({
+                where: {
+                    userId,
+                    deletedAt: null,
+                    imageAsset: { is: { status: 'ACTIVE', deletedAt: null } }
+                },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    tags: { select: { tagName: true } },
+                    imageAsset: { select: { id: true, mimeType: true } }
+                }
+            }),
+            this.prisma.userStylePreference.findMany({
+                where: { userId, styleTagId: { in: styleTagIds } },
+                orderBy: { styleTag: { displayOrder: 'asc' } },
+                include: { styleTag: { select: { id: true, code: true, name: true } } }
+            })
+        ]);
+        const selectedIdSet = new Set(selectedItemIds);
+        return {
+            bodyProfile,
+            selectedItems: closetItemPool.filter((item) => selectedIdSet.has(item.id)),
+            closetItemPool,
+            stylePreferences: stylePreferences.map((preference) => preference.styleTag)
+        };
+    }
+
+    findJobByIdempotencyKey(userId, idempotencyKey) {
+        return this.prisma.outfitGenerationJob.findFirst({
+            where: { userId, idempotencyKey },
+            include: {
+                revision: true,
+                result: { include: { savedOutfits: { select: { id: true } } } }
+            }
+        });
     }
 
     findActiveBodyProfile(userId) {
@@ -69,7 +113,7 @@ export class OutfitRepository {
     findJob(userId, id) {
         return this.prisma.outfitGenerationJob.findFirst({
             where: { id, userId },
-            include: { result: { include: { savedOutfits: { where: { deletedAt: null }, select: { id: true } } } } }
+            include: { revision: true, result: { include: { savedOutfits: { select: { id: true } } } } }
         });
     }
 
@@ -102,7 +146,25 @@ export class OutfitRepository {
             where: {
                 id,
                 status: 'COMPLETED',
-                result: { savedOutfits: { none: { deletedAt: null } } }
+                result: { savedOutfits: { none: {} } }
+            },
+            data: { status: 'EXPIRED', failureCode: 'RESULT_EXPIRED', failureReason: 'Unsaved outfit result expired.' }
+        });
+    }
+
+    expireAllStaleActiveJobs(now = new Date()) {
+        return this.prisma.outfitGenerationJob.updateMany({
+            where: { status: { in: ['QUEUED', 'PROCESSING', 'QC_PENDING'] }, expiresAt: { lte: now } },
+            data: { status: 'EXPIRED', failureCode: 'JOB_TIMEOUT', failureReason: 'Outfit generation job expired.', completedAt: now }
+        });
+    }
+
+    expireAllCompletedJobs(cutoff) {
+        return this.prisma.outfitGenerationJob.updateMany({
+            where: {
+                status: 'COMPLETED',
+                completedAt: { lte: cutoff },
+                result: { savedOutfits: { none: {} } }
             },
             data: { status: 'EXPIRED', failureCode: 'RESULT_EXPIRED', failureReason: 'Unsaved outfit result expired.' }
         });
@@ -125,7 +187,9 @@ export class OutfitRepository {
         return this.prisma.$transaction(async (tx) => {
             const result = await tx.outfitResult.create({ data: {
                 userId: job.userId, generationJobId: job.id, generatedImageUrl: aiResult.generatedImageUrl,
-                provider: aiResult.provider, fallbackUsed: aiResult.fallbackUsed,
+                provider: aiResult.provider, modelVersion: aiResult.modelVersion,
+                promptVersion: aiResult.promptVersion, fallbackUsed: aiResult.fallbackUsed,
+                ...(aiResult.outfitItems ? { outfitItems: aiResult.outfitItems } : {}),
                 recommendedClosetItemIds: aiResult.recommendedClosetItemIds
             } });
             const updated = await tx.outfitGenerationJob.updateMany({

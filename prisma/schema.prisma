@@ -39,24 +39,24 @@ enum OutfitGenerationStatus {
 
 // 예시 user테이블. 나중에 ERD보면서 수정하면 됩니다.
 model User {
-  id             Int             @id @default(autoincrement())
-  username       String?         @unique @db.VarChar(30)
-  email          String          @unique
-  passwordHash   String?         @map("password_hash") @db.VarChar(60)
-  name           String?
-  styleTags      Json?           @map("style_tags")
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  images         ImageAsset[]
-  closetItems ClosetItem[]
-  consentLogs ConsentLog[]
-  importSessions ImportSession[]
+  id                   Int                   @id @default(autoincrement())
+  username             String?               @unique @db.VarChar(30)
+  email                String                @unique
+  passwordHash         String?               @map("password_hash") @db.VarChar(60)
+  name                 String?
+  styleTags            Json?                 @map("style_tags")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  images               ImageAsset[]
+  closetItems          ClosetItem[]
+  consentLogs          ConsentLog[]
+  importSessions       ImportSession[]
   outfitGenerationJobs OutfitGenerationJob[]
-  outfitResults OutfitResult[]
-  savedOutfits SavedOutfit[]
-  outfitRevisions OutfitRevision[]
-  bodyProfile BodyProfile?
-  stylePreferences UserStylePreference[]
+  outfitResults        OutfitResult[]
+  savedOutfits         SavedOutfit[]
+  outfitRevisions      OutfitRevision[]
+  bodyProfile          BodyProfile?
+  stylePreferences     UserStylePreference[]
 
   @@map("users")
 }
@@ -87,41 +87,45 @@ model UserStylePreference {
 }
 
 model OutfitGenerationJob {
-  id            Int                    @id @default(autoincrement())
-  userId        Int                    @map("user_id")
-  status        OutfitGenerationStatus @default(QUEUED)
-  bodyProfileId Int?                   @map("body_profile_id")
-  closetItemIds Json                   @map("closet_item_ids")
-  styleTagIds   Json                   @map("style_tag_ids")
-  situation     String?                @db.VarChar(30)
-  selectedDate  DateTime?              @map("selected_date") @db.Date
-  weather       Json?
-  progress      Int                    @default(5)
-  expiresAt     DateTime               @map("expires_at")
-  failureCode   String?                @map("failure_code") @db.VarChar(80)
-  failureReason String?                @map("failure_reason") @db.VarChar(500)
-  startedAt     DateTime?              @map("started_at")
-  completedAt   DateTime?              @map("completed_at")
-  createdAt     DateTime               @default(now()) @map("created_at")
-  updatedAt     DateTime               @updatedAt @map("updated_at")
-  user          User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  bodyProfile   BodyProfile?           @relation(fields: [bodyProfileId], references: [id], onDelete: SetNull)
-  result        OutfitResult?
-  revision      OutfitRevision?
+  id                 Int                    @id @default(autoincrement())
+  userId             Int                    @map("user_id")
+  idempotencyKey     String?                @map("idempotency_key") @db.VarChar(128)
+  inputSchemaVersion String                 @default("outfit-input-v1") @map("input_schema_version") @db.VarChar(40)
+  status             OutfitGenerationStatus @default(QUEUED)
+  bodyProfileId      Int?                   @map("body_profile_id")
+  closetItemIds      Json                   @map("closet_item_ids")
+  styleTagIds        Json                   @map("style_tag_ids")
+  situation          String?                @db.VarChar(30)
+  selectedDate       DateTime?              @map("selected_date") @db.Date
+  weather            Json?
+  inputSnapshot      Json?                  @map("input_snapshot")
+  progress           Int                    @default(5)
+  expiresAt          DateTime               @map("expires_at")
+  failureCode        String?                @map("failure_code") @db.VarChar(80)
+  failureReason      String?                @map("failure_reason") @db.VarChar(500)
+  startedAt          DateTime?              @map("started_at")
+  completedAt        DateTime?              @map("completed_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  bodyProfile        BodyProfile?           @relation(fields: [bodyProfileId], references: [id], onDelete: SetNull)
+  result             OutfitResult?
+  revision           OutfitRevision?
 
+  @@unique([userId, idempotencyKey])
   @@index([userId, status, createdAt])
   @@map("outfit_generation_jobs")
 }
 
 model BodyProfile {
-  id                   Int                    @id @default(autoincrement())
-  userId               Int                    @unique @map("user_id")
-  bodyBalance          BodyBalance?           @map("body_balance")
-  shoulderWidth        ShoulderWidth?         @map("shoulder_width")
-  frameSize            FrameSize?             @map("frame_size")
-  createdAt            DateTime               @default(now()) @map("created_at")
-  updatedAt            DateTime               @updatedAt @map("updated_at")
-  user                 User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id                   Int                   @id @default(autoincrement())
+  userId               Int                   @unique @map("user_id")
+  bodyBalance          BodyBalance?          @map("body_balance")
+  shoulderWidth        ShoulderWidth?        @map("shoulder_width")
+  frameSize            FrameSize?            @map("frame_size")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
   outfitGenerationJobs OutfitGenerationJob[]
 
   @@map("body_profiles")
@@ -146,18 +150,21 @@ enum FrameSize {
 }
 
 model OutfitResult {
-  id                      Int                  @id @default(autoincrement())
-  userId                  Int                  @map("user_id")
-  generationJobId         Int                  @unique @map("generation_job_id")
-  generatedImageUrl       String               @map("generated_image_url") @db.VarChar(1000)
-  provider                String               @db.VarChar(80)
-  fallbackUsed            Boolean              @default(false) @map("fallback_used")
+  id                       Int                 @id @default(autoincrement())
+  userId                   Int                 @map("user_id")
+  generationJobId          Int                 @unique @map("generation_job_id")
+  generatedImageUrl        String              @map("generated_image_url") @db.VarChar(1000)
+  provider                 String              @db.VarChar(80)
+  modelVersion             String              @default("legacy") @map("model_version") @db.VarChar(80)
+  promptVersion            String?             @map("prompt_version") @db.VarChar(80)
+  fallbackUsed             Boolean             @default(false) @map("fallback_used")
+  outfitItems              Json?               @map("outfit_items")
   recommendedClosetItemIds Json                @map("recommended_closet_item_ids")
-  createdAt               DateTime             @default(now()) @map("created_at")
-  user                    User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
-  generationJob           OutfitGenerationJob  @relation(fields: [generationJobId], references: [id], onDelete: Restrict)
-  savedOutfits            SavedOutfit[]
-  sourceRevisions         OutfitRevision[]     @relation("RevisionSource")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  user                     User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  generationJob            OutfitGenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Restrict)
+  savedOutfits             SavedOutfit[]
+  sourceRevisions          OutfitRevision[]    @relation("RevisionSource")
 
   @@index([userId, createdAt])
   @@map("outfit_results")
@@ -228,7 +235,7 @@ model ClosetItem {
   size       String     @db.VarChar(60)
   category   String     @db.VarChar(60)
   importType String     @map("import_type") @db.VarChar(60)
-  deletedAt DateTime?
+  deletedAt  DateTime?
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
   user       User       @relation(fields: [userId], references: [id], onDelete: Restrict)

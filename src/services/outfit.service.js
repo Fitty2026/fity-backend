@@ -4,6 +4,7 @@ const SITUATIONS = new Set(['DATE', 'WORK', 'SCHOOL', 'TRAVEL']);
 const WEATHER_CONDITIONS = new Set(['SUNNY', 'CLOUDY', 'RAINY', 'SNOWY', 'WINDY', 'UNKNOWN']);
 const JOB_TTL_MS = 10 * 60 * 1000;
 const RESULT_TTL_MS = 24 * 60 * 60 * 1000;
+const INPUT_SCHEMA_VERSION = 'outfit-input-v1';
 const isResultExpired = (result, now) => result.generationJob.status !== 'COMPLETED'
     || !result.generationJob.completedAt
     || now.getTime() - new Date(result.generationJob.completedAt).getTime() >= RESULT_TTL_MS;
@@ -13,8 +14,11 @@ const positiveId = (value, field) => {
     return id;
 };
 
-const normalizeIds = (value, field, { required = false } = {}) => {
+const normalizeIds = (value, field, { required = false, maximum } = {}) => {
     if (value == null && !required) return [];
+    if (Array.isArray(value) && maximum && value.length > maximum) {
+        throw httpError(400, 'REQUEST400', `${field} must contain ${maximum} IDs or fewer.`);
+    }
     if (!Array.isArray(value) || (required && value.length === 0)
         || !value.every((id) => Number.isSafeInteger(id) && id > 0)) {
         throw httpError(400, 'REQUEST400', `${field} must be an array of positive integer IDs.`);
@@ -28,6 +32,14 @@ const normalizeOptionalEnum = (value, field, allowed) => {
         throw httpError(400, 'REQUEST400', `${field} has an unsupported value.`);
     }
     return value;
+};
+
+const normalizeIdempotencyKey = (value) => {
+    if (value == null) return null;
+    if (typeof value !== 'string' || !value.trim() || value.trim().length > 128) {
+        throw httpError(400, 'REQUEST400', 'Idempotency-Key must be a non-empty string of 128 characters or fewer.');
+    }
+    return value.trim();
 };
 
 const normalizeSelectedDate = (value) => {
@@ -91,7 +103,37 @@ const createFallbackResult = (job, generatedImageUrl) => ({
     generatedImageUrl,
     recommendedClosetItemIds: [...job.closetItemIds],
     provider: 'fitty-fallback',
+    modelVersion: 'fallback-v1',
+    promptVersion: null,
+    outfitItems: null,
     fallbackUsed: true
+});
+
+const toClosetItemSnapshot = (item) => ({
+    itemId: item.id,
+    category: item.category,
+    tags: (item.tags ?? []).map((tag) => tag.tagName),
+    imageRef: {
+        assetId: item.imageAsset?.id ?? item.imageId,
+        contentPath: `/api/v1/images/${item.imageAsset?.id ?? item.imageId}/content`,
+        mimeType: item.imageAsset?.mimeType ?? null
+    }
+});
+
+const createInputSnapshot = ({ bodyProfile, selectedItems, closetItemPool, stylePreferences }, input) => ({
+    schemaVersion: INPUT_SCHEMA_VERSION,
+    bodyProfile: {
+        id: bodyProfile.id,
+        bodyBalance: bodyProfile.bodyBalance ?? null,
+        shoulderWidth: bodyProfile.shoulderWidth ?? null,
+        frameSize: bodyProfile.frameSize ?? null
+    },
+    stylePreferences: stylePreferences.map(({ id, code, name }) => ({ styleTagId: id, code, name })),
+    selectedItems: selectedItems.map(toClosetItemSnapshot),
+    closetItemPool: closetItemPool.map(toClosetItemSnapshot),
+    moodContext: input.situation ? { type: input.situation } : null,
+    selectedDate: input.selectedDate,
+    weatherContext: input.weather
 });
 
 const jobInput = (job) => ({
@@ -102,10 +144,22 @@ const jobInput = (job) => ({
     weather: job.weather ?? null
 });
 
+const sameJson = (left, right) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+const sameIds = (left, right) => sameJson(
+    [...(left ?? [])].sort((a, b) => a - b),
+    [...(right ?? [])].sort((a, b) => a - b)
+);
+const matchesGenerationInput = (job, input) => sameIds(job.closetItemIds, input.closetItemIds)
+    && sameIds(job.styleTagIds, input.styleTagIds)
+    && (job.situation ?? null) === input.situation
+    && (job.selectedDate ? new Date(job.selectedDate).toISOString().slice(0, 10) : null) === input.selectedDate
+    && sameJson(job.weather, input.weather);
+
 const toJob = (job, { isExistingJob, includeInput = false, includeResult = true } = {}) => ({
     jobId: job.id,
     status: job.status.toLowerCase(),
     progress: job.progress,
+    inputSchemaVersion: job.inputSchemaVersion ?? INPUT_SCHEMA_VERSION,
     ...(isExistingJob === undefined ? {} : { isExistingJob }),
     ...(includeInput ? { input: jobInput(job) } : {}),
     expiresAt: job.expiresAt,
@@ -114,12 +168,25 @@ const toJob = (job, { isExistingJob, includeInput = false, includeResult = true 
         outfitResultId: job.result.id,
         imageUrl: job.result.generatedImageUrl,
         provider: job.result.provider,
+        modelVersion: job.result.modelVersion,
+        promptVersion: job.result.promptVersion ?? null,
         fallbackUsed: job.result.fallbackUsed,
+        outfitItems: job.result.outfitItems ?? null,
         recommendedClosetItemIds: job.result.recommendedClosetItemIds
     } : null } : {}),
     ...(includeResult ? { failure: ['FAILED', 'EXPIRED'].includes(job.status) ? { code: job.failureCode, message: job.failureReason } : null } : {}),
     createdAt: job.createdAt,
     completedAt: job.completedAt
+});
+
+const toRevision = (job, revision) => ({
+    revisionId: revision.id,
+    jobId: job.id,
+    parentOutfitResultId: revision.sourceOutfitResultId,
+    status: job.status.toLowerCase(),
+    progress: job.progress,
+    createdAt: job.createdAt,
+    expiresAt: job.expiresAt
 });
 
 const toSaved = (saved) => ({
@@ -128,7 +195,10 @@ const toSaved = (saved) => ({
     outfitResultId: saved.outfitResultId,
     name: saved.name,
     imageUrl: saved.outfitResult.generatedImageUrl,
+    modelVersion: saved.outfitResult.modelVersion,
+    promptVersion: saved.outfitResult.promptVersion ?? null,
     items: saved.outfitResult.recommendedClosetItemIds,
+    outfitItems: saved.outfitResult.outfitItems ?? null,
     styleTags: saved.outfitResult.generationJob?.styleTagIds ?? [],
     tags: saved.tags,
     memo: saved.memo,
@@ -155,24 +225,51 @@ export class OutfitService {
         this.now = now;
     }
 
-    async createGenerationJob(userId, input = {}) {
-        const closetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { required: true });
-        const styleTagIds = normalizeIds(input.styleTagIds, 'styleTagIds');
+    async createGenerationJob(userId, input = {}, rawIdempotencyKey) {
+        const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
+        const closetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { required: true, maximum: 3 });
+        let styleTagIds = input.styleTagIds == null ? null : normalizeIds(input.styleTagIds, 'styleTagIds');
         const situation = normalizeOptionalEnum(input.situation, 'situation', SITUATIONS);
         const selectedDate = normalizeSelectedDate(input.selectedDate);
         const weather = normalizeWeather(input.weather);
+        const existing = idempotencyKey
+            ? await this.repository.findJobByIdempotencyKey(userId, idempotencyKey)
+            : null;
+        if (existing && styleTagIds === null) styleTagIds = existing.styleTagIds;
+        if (styleTagIds === null) styleTagIds = await this.repository.findOwnedStyleTagIds(userId, null);
+        const normalizedInput = {
+            closetItemIds,
+            styleTagIds,
+            situation,
+            selectedDate: selectedDate ? selectedDate.toISOString().slice(0, 10) : null,
+            weather
+        };
+        if (existing) {
+            if (!matchesGenerationInput(existing, normalizedInput)) {
+                throw httpError(409, 'CONFLICT409', 'Idempotency-Key was already used with a different outfit request.');
+            }
+            return toJob(existing, { isExistingJob: true, includeInput: true, includeResult: false });
+        }
         const ownedItemIds = await this.repository.findOwnedClosetItemIds(userId, closetItemIds);
         if (ownedItemIds.length !== closetItemIds.length) throw httpError(403, 'FORBIDDEN403', 'Closet item ownership check failed.');
         if (styleTagIds.length > 0) {
             const ownedStyleTagIds = await this.repository.findOwnedStyleTagIds(userId, styleTagIds);
             if (ownedStyleTagIds.length !== styleTagIds.length) throw httpError(404, 'NOT_FOUND404', 'Style preference was not found.');
         }
-        const bodyProfile = await this.repository.findActiveBodyProfile(userId);
-        if (!bodyProfile) throw httpError(404, 'NOT_FOUND404', 'Active body profile was not found.');
+        const context = await this.repository.findGenerationContext(userId, closetItemIds, styleTagIds);
+        if (!context.bodyProfile) throw httpError(404, 'NOT_FOUND404', 'Active body profile was not found.');
+        if (context.selectedItems.length !== closetItemIds.length) {
+            throw httpError(403, 'FORBIDDEN403', 'Closet item is not active or its image is unavailable.');
+        }
+        if (context.stylePreferences.length !== styleTagIds.length) {
+            throw httpError(404, 'NOT_FOUND404', 'Style preference was not found.');
+        }
+        const inputSnapshot = createInputSnapshot(context, normalizedInput);
         const now = this.now();
         const jobData = {
-            userId, bodyProfileId: bodyProfile.id, closetItemIds, styleTagIds, situation,
-            selectedDate, weather, progress: 5, expiresAt: new Date(now.getTime() + JOB_TTL_MS)
+            userId, idempotencyKey, inputSchemaVersion: INPUT_SCHEMA_VERSION,
+            bodyProfileId: context.bodyProfile.id, closetItemIds, styleTagIds, situation,
+            selectedDate, weather, inputSnapshot, progress: 5, expiresAt: new Date(now.getTime() + JOB_TTL_MS)
         };
         let created;
         for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -180,6 +277,16 @@ export class OutfitService {
                 created = await this.repository.createOrFindActiveJob(jobData, now);
                 break;
             } catch (error) {
+                if (error.code === 'P2002' && idempotencyKey) {
+                    const existing = await this.repository.findJobByIdempotencyKey(userId, idempotencyKey);
+                    if (existing && matchesGenerationInput(existing, normalizedInput)) {
+                        created = { job: existing, isExistingJob: true };
+                        break;
+                    }
+                    if (existing) {
+                        throw httpError(409, 'CONFLICT409', 'Idempotency-Key was already used with a different outfit request.');
+                    }
+                }
                 if (error.code !== 'P2034' || attempt === 2) throw error;
             }
         }
@@ -212,11 +319,23 @@ export class OutfitService {
         return job ? toJob(job, { isExistingJob: true, includeInput: true, includeResult: false }) : null;
     }
 
-    async createRevision(userId, rawResultId, input = {}) {
+    async createRevision(userId, rawResultId, input = {}, rawIdempotencyKey) {
+        const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
         const outfitResultId = positiveId(rawResultId, 'outfitResultId');
         const replaceItemId = positiveId(input.replaceItemId, 'replaceItemId');
         const newItemId = positiveId(input.newItemId, 'newItemId');
         if (replaceItemId === newItemId) throw httpError(400, 'REQUEST400', 'replaceItemId and newItemId must be different.');
+        if (idempotencyKey) {
+            const existing = await this.repository.findJobByIdempotencyKey(userId, idempotencyKey);
+            if (existing) {
+                const revision = existing.revision;
+                if (!revision || revision.sourceOutfitResultId !== outfitResultId
+                    || revision.replaceItemId !== replaceItemId || revision.newItemId !== newItemId) {
+                    throw httpError(409, 'CONFLICT409', 'Idempotency-Key was already used with a different outfit request.');
+                }
+                return toRevision(existing, revision);
+            }
+        }
         const source = await this.repository.findResult(userId, outfitResultId);
         if (!source) throw httpError(404, 'NOT_FOUND404', 'Outfit result was not found.');
         if (isResultExpired(source, this.now())) throw httpError(404, 'NOT_FOUND404', 'Outfit result is no longer available.');
@@ -230,35 +349,51 @@ export class OutfitService {
         await this.repository.expireStaleActiveJobs(userId, now);
         if (await this.repository.findActiveJob(userId, now)) throw httpError(409, 'CONFLICT409', 'An outfit generation job is already in progress.');
         const closetItemIds = itemIds.map((id) => id === replaceItemId ? newItemId : id);
-        const bodyProfile = await this.repository.findActiveBodyProfile(userId);
-        if (!bodyProfile) throw httpError(404, 'NOT_FOUND404', 'Active body profile was not found.');
+        const normalizedInput = {
+            closetItemIds,
+            styleTagIds: source.generationJob.styleTagIds,
+            situation: source.generationJob.situation ?? null,
+            selectedDate: source.generationJob.selectedDate
+                ? new Date(source.generationJob.selectedDate).toISOString().slice(0, 10)
+                : null,
+            weather: source.generationJob.weather ?? null
+        };
+        const context = await this.repository.findGenerationContext(userId, closetItemIds, normalizedInput.styleTagIds);
+        if (!context.bodyProfile) throw httpError(404, 'NOT_FOUND404', 'Active body profile was not found.');
+        if (context.selectedItems.length !== closetItemIds.length) {
+            throw httpError(409, 'ITEM_NOT_COMPATIBLE', 'Every item in the revised outfit must still be active and available.');
+        }
+        const inputSnapshot = createInputSnapshot(context, normalizedInput);
         let created;
         try {
             created = await this.repository.createRevisionJob({
                 revision: { userId, sourceOutfitResultId: source.id, replaceItemId, newItemId },
                 job: {
-                    userId, bodyProfileId: bodyProfile.id, closetItemIds,
+                    userId, idempotencyKey, inputSchemaVersion: INPUT_SCHEMA_VERSION,
+                    bodyProfileId: context.bodyProfile.id, closetItemIds,
                     styleTagIds: source.generationJob.styleTagIds, situation: source.generationJob.situation,
                     selectedDate: source.generationJob.selectedDate, weather: source.generationJob.weather,
-                    progress: 5, expiresAt: new Date(now.getTime() + JOB_TTL_MS)
+                    inputSnapshot, progress: 5, expiresAt: new Date(now.getTime() + JOB_TTL_MS)
                 }
             }, now);
         } catch (error) {
+            if (error.code === 'P2002' && idempotencyKey) {
+                const existing = await this.repository.findJobByIdempotencyKey(userId, idempotencyKey);
+                if (existing?.revision && existing.revision.sourceOutfitResultId === outfitResultId
+                    && existing.revision.replaceItemId === replaceItemId && existing.revision.newItemId === newItemId) {
+                    return toRevision(existing, existing.revision);
+                }
+                if (existing) {
+                    throw httpError(409, 'CONFLICT409', 'Idempotency-Key was already used with a different outfit request.');
+                }
+            }
             if (error.code === 'ACTIVE_JOB_EXISTS' || error.code === 'P2034') {
                 throw httpError(409, 'CONFLICT409', 'An outfit generation job is already in progress.');
             }
             throw error;
         }
         const { job, revision } = created;
-        return {
-            revisionId: revision.id,
-            jobId: job.id,
-            parentOutfitResultId: source.id,
-            status: job.status.toLowerCase(),
-            progress: job.progress,
-            createdAt: job.createdAt,
-            expiresAt: job.expiresAt
-        };
+        return toRevision(job, revision);
     }
 
     async processGenerationJob(rawId) {
@@ -270,10 +405,24 @@ export class OutfitService {
                 result = await this.aiAdapter.generate({
                     jobId: job.id, userId: job.userId, bodyProfileId: job.bodyProfileId,
                     closetItemIds: job.closetItemIds, styleTagIds: job.styleTagIds,
+                    inputSchemaVersion: job.inputSchemaVersion,
+                    inputSnapshot: job.inputSnapshot,
                     situation: job.situation,
                     selectedDate: job.selectedDate ? new Date(job.selectedDate).toISOString().slice(0, 10) : null,
                     weather: job.weather
                 });
+                const poolItems = job.inputSnapshot?.closetItemPool ?? [];
+                const poolCategories = new Map(poolItems.map((item) => [item.itemId, item.category]));
+                if (poolCategories.size > 0
+                    && result.recommendedClosetItemIds.some((itemId) => !poolCategories.has(itemId))) {
+                    throw Object.assign(new Error('AI recommended an item outside the generation snapshot.'), { code: 'AI_INVALID_RECOMMENDATION' });
+                }
+                if (result.outfitItems) {
+                    const categories = result.outfitItems.map((item) => poolCategories.get(item.itemId)).filter(Boolean);
+                    if (new Set(categories).size !== categories.length) {
+                        throw Object.assign(new Error('AI recommended duplicate outfit categories.'), { code: 'AI_INVALID_RECOMMENDATION' });
+                    }
+                }
                 const ownedRecommendationIds = await this.repository.findOwnedClosetItemIds(job.userId, result.recommendedClosetItemIds);
                 if (ownedRecommendationIds.length !== result.recommendedClosetItemIds.length) {
                     throw Object.assign(new Error('AI recommended an inaccessible closet item.'), { code: 'AI_INVALID_RECOMMENDATION' });
@@ -299,6 +448,16 @@ export class OutfitService {
             processed: settled.filter((result) => result.status === 'fulfilled' && result.value).length,
             failed: settled.filter((result) => result.status === 'rejected').length
         };
+    }
+
+    async cleanupExpiredJobs() {
+        const now = this.now();
+        const cutoff = new Date(now.getTime() - RESULT_TTL_MS);
+        const [staleJobs, expiredResults] = await Promise.all([
+            this.repository.expireAllStaleActiveJobs(now),
+            this.repository.expireAllCompletedJobs(cutoff)
+        ]);
+        return { staleJobs: staleJobs.count, expiredResults: expiredResults.count };
     }
 
     async saveOutfit(userId, { outfitResultId, name, tags, memo } = {}) {

@@ -102,10 +102,11 @@ erDiagram
     OUTFIT_GENERATION_JOBS {
         int id PK
         int user_id FK
-        enum status "QUEUED, PROCESSING, COMPLETED, FAILED"
+        enum status "QUEUED, PROCESSING, QC_PENDING, COMPLETED, FAILED, EXPIRED"
         int body_profile_id FK "nullable"
         json closet_item_ids "not a foreign key"
         json style_tag_ids "not a foreign key"
+        json input_snapshot "immutable generation input"
         string failure_code "nullable, VARCHAR(80)"
         string failure_reason "nullable, VARCHAR(500)"
         datetime started_at "nullable"
@@ -121,6 +122,7 @@ erDiagram
         string generated_image_url "VARCHAR(1000)"
         string provider "VARCHAR(80)"
         boolean fallback_used
+        json outfit_items "slot and item ID pairs, nullable"
         json recommended_closet_item_ids "not a foreign key"
         datetime created_at
     }
@@ -162,7 +164,8 @@ erDiagram
 - `outfit_results.generation_job_id`는 유일하므로 코디 생성 작업당 결과는 최대 1개입니다.
 - `saved_outfits`는 `(user_id, outfit_result_id)`가 유일하므로 같은 사용자가 같은 결과를 중복 저장할 수 없습니다.
 - `item_tags`는 `(closet_item_id, tag_name)`가 유일하므로 같은 옷장 아이템에 동일한 태그를 중복 등록할 수 없습니다.
-- `outfit_generation_jobs.closet_item_ids`, `outfit_generation_jobs.style_tag_ids`, `outfit_results.recommended_closet_item_ids`는 JSON 값이며 관련 테이블을 참조하는 데이터베이스 외래키가 아닙니다.
+- `outfit_generation_jobs.input_snapshot`은 작업 생성 당시의 체형 파생값, 선호 태그, 선택 아이템, 활성 옷장 pool, 상황·날짜·날씨를 보존합니다.
+- `outfit_generation_jobs.closet_item_ids`, `outfit_generation_jobs.style_tag_ids`, `outfit_results.outfit_items`, `outfit_results.recommended_closet_item_ids`는 JSON 값이며 관련 테이블을 참조하는 데이터베이스 외래키가 아닙니다.
 - `outfit_results.generated_image_url`도 현재 `image_assets`와 외래키로 연결되어 있지 않습니다.
 - `users.style_tags`는 기존 JSON 필드로 남아 있으며, 정규화된 현재 선호 관계는 `user_style_preferences`와 `style_tags`에 함께 정의되어 있습니다.
 
