@@ -16,5 +16,12 @@ export const createAuthController = (authService) => ({
         } catch (error) {
             return next(error);
         }
+    },
+    logout: async (req, res, next) => {
+        try {
+            return sendResponse(res, null, '로그아웃에 성공했습니다.');
+        } catch (error) {
+            return next(error);
+        }
     }
 });

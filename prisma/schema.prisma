@@ -155,9 +155,18 @@ model OutfitGenerationJob {
 model BodyProfile {
   id                   Int                   @id @default(autoincrement())
   userId               Int                   @unique @map("user_id")
+  bodyType             String?               @map("body_type")
   bodyBalance          BodyBalance?          @map("body_balance")
   shoulderWidth        ShoulderWidth?        @map("shoulder_width")
   frameSize            FrameSize?            @map("frame_size")
+  analysisId           Int?                  @map("analysis_id")
+  shoulderWidthCm      Float?                @map("shoulder_width_cm") // 숫자 치수 저장용
+  chestCircumference   Float?                @map("chest_circumference")
+  waistCircumference   Float?                @map("waist_circumference")
+  hipCircumference     Float?                @map("hip_circumference")
+  upperBodyLength      Float?                @map("upper_body_length")
+  lowerBodyLength      Float?                @map("lower_body_length")
+  legLength            Float?                @map("leg_length")
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Restrict)

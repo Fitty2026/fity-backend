@@ -31,14 +31,18 @@ export const createUserProfileController = (userProfileService) => ({
         catch (error) { return next(error); }
     },
     analyzeBodyProfile: async (req, res, next) => {
-        try { return sendResponse(res, await userProfileService.analyzeBodyProfile(userIdOf(req), req.body || {}), '체형 사진을 분석했습니다.'); }
+        try { const result = await userProfileService.analyzeBodyProfile(userIdOf(req), req.files || {});
+            return sendResponse(res, result, '체형 사진을 분석했습니다.'); }
+        catch (error) { return next(error); }
+    },
+    saveBodyProfile: async (req, res, next) => {
+        try { const result = await userProfileService.saveBodyProfile(userIdOf(req), req.body);
+            return sendResponse(res, result, '체형 프로필이 성공적으로 저장되었습니다.'); } 
         catch (error) { return next(error); }
     },
     saveAgreements: async (req, res, next) => {
-        try {
-            await userProfileService.saveAgreements(userIdOf(req), req.body || {});
-            return sendResponse(res, null, '약관 동의를 저장했습니다.');
-        }
+        try { await userProfileService.saveAgreements(userIdOf(req), req.body || {});
+            return sendResponse(res, null, '약관 동의를 저장했습니다.'); }
         catch (error) { return next(error); }
     }
 });
