@@ -10,11 +10,13 @@ import { sendResponse, errorHandler } from './middlewares/response.middleware.js
 import { AuthRepository } from './repositories/auth.repository.js';
 import { ImageRepository } from './repositories/image.repository.js';
 import { OutfitRepository } from './repositories/outfit.repository.js';
+import { PuzzleRepository } from './repositories/puzzle.repository.js';
 import { createIndexRouter } from './routes/index.js';
 import { AuthService } from './services/auth.service.js';
 import { ImageService } from './services/image.service.js';
 import { OutfitService } from './services/outfit.service.js';
 import { OutfitAiAdapter } from './services/outfit-ai.service.js';
+import { PuzzleService } from './services/puzzle.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
 import { UserProfileService } from './services/user-profile.service.js';
@@ -39,6 +41,9 @@ const createDefaultClosetService = () => new ClosetService({ getPrisma });
 const createDefaultUserProfileService = () => new UserProfileService({ getPrisma });
 const createDefaultOutfitService = () => new OutfitService({
     repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
+});
+const createDefaultPuzzleService = () => new PuzzleService({
+    repository: new PuzzleRepository(getPrisma)
 });
 
 export const createCorsOptions = (configuredOrigins = process.env.CORS_ALLOWED_ORIGINS) => {
@@ -67,6 +72,7 @@ export const createApp = ({
     closetService = createDefaultClosetService(),
     userProfileService = createDefaultUserProfileService(),
     outfitService = createDefaultOutfitService(),
+    puzzleService = createDefaultPuzzleService(),
     authenticate = authenticateJwt,
     healthCheck = defaultHealthCheck,
     internalToken = process.env.INTERNAL_WORKER_TOKEN
@@ -77,6 +83,7 @@ export const createApp = ({
     app.locals.closetService = closetService;
     app.locals.userProfileService = userProfileService;
     app.locals.outfitService = outfitService;
+    app.locals.puzzleService = puzzleService;
 
     app.use(cors(createCorsOptions()));
     app.use(express.json());
@@ -86,7 +93,7 @@ export const createApp = ({
         index: false,
         maxAge: '1h'
     }));
-    app.use('/api', createIndexRouter({ imageService, authService, closetService, userProfileService, outfitService, authenticate, internalToken }));
+    app.use('/api', createIndexRouter({ imageService, authService, closetService, userProfileService, outfitService, puzzleService, authenticate, internalToken }));
 
     app.get('/health', async (req, res, next) => {
         try {
