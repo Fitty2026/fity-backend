@@ -274,8 +274,12 @@ model ImageAsset {
 model ClosetItem {
   id         Int        @id @default(autoincrement())
   userId     Int        @map("user_id")
-  imageId    Int        @map("image_id")
+  imageId    Int?        @map("image_id")
   name       String     @db.VarChar(120)
+  brand       String?   @db.VarChar(100)
+  colorText   String?   @map("color_text") @db.VarChar(50)
+  subCategory String?   @map("sub_category") @db.VarChar(60)
+  memo        String?   @db.VarChar(500)
   size       String     @db.VarChar(60)
   category   String     @db.VarChar(60)
   importType String     @map("import_type") @db.VarChar(60)
@@ -283,7 +287,7 @@ model ClosetItem {
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
   user       User       @relation(fields: [userId], references: [id], onDelete: Restrict)
-  imageAsset ImageAsset @relation(fields: [imageId], references: [id], onDelete: Restrict)
+  imageAsset ImageAsset? @relation(fields: [imageId], references: [id], onDelete: Restrict)
   tags       ItemTag[]
 
   @@index([userId, createdAt])

@@ -67,9 +67,7 @@ await request('/api/v1/users/onboarding/style', json('POST', {
 }, token));
 
 await request('/api/v1/body-profiles/type', json('POST', {
-    bodyBalance: 'BALANCED',
-    shoulderWidth: 'AVERAGE',
-    frameSize: 'MEDIUM'
+    bodyType: 'STRAIGHT'
 }, token));
 
 const generation = await request('/api/v1/outfits/generation-jobs', json('POST', {

@@ -6,15 +6,14 @@ export const createUserProfileRouter = ({ userProfileService, authenticate }) =>
     const router = express.Router();
     const controller = createUserProfileController(userProfileService);
 
-    router.use(authenticate);
-    router.get('/users/me', controller.getMe);
-    router.patch('/users/me', controller.updateMe);
-    router.post('/users/agreements', controller.saveAgreements);
-    router.get('/style-tags', controller.listStyleTags);
-    router.post('/users/onboarding/style', controller.saveOnboardingStyles);
-    router.get('/body-profiles/me', controller.getBodyProfile);
-    router.post('/body-profiles/type', controller.saveBodyType);
-    router.post('/body-profiles/analyze', uploadBodyProfileImages, controller.analyzeBodyProfile);
-    router.post('/body-profiles', controller.saveBodyProfile);
+    router.get('/users/me', authenticate, controller.getMe);
+    router.patch('/users/me', authenticate, controller.updateMe);
+    router.post('/users/agreements', authenticate, controller.saveAgreements);
+    router.get('/style-tags', authenticate, controller.listStyleTags);
+    router.post('/users/onboarding/style', authenticate, controller.saveOnboardingStyles);
+    router.get('/body-profiles/me', authenticate, controller.getBodyProfile);
+    router.post('/body-profiles/type', authenticate, controller.saveBodyType);
+    router.post('/body-profiles/analyze', authenticate, uploadBodyProfileImages, controller.analyzeBodyProfile);
+    router.post('/body-profiles', authenticate, controller.saveBodyProfile);
     return router;
 };

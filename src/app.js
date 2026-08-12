@@ -20,6 +20,7 @@ import { PuzzleService } from './services/puzzle.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
 import { UserProfileService } from './services/user-profile.service.js';
+import { ReceiptService } from './services/receipt.service.js';
 
 const createDefaultImageService = () => {
     const repository = new ImageRepository(getPrisma);
@@ -45,6 +46,7 @@ const createDefaultOutfitService = () => new OutfitService({
 const createDefaultPuzzleService = () => new PuzzleService({
     repository: new PuzzleRepository(getPrisma)
 });
+const createDefaultReceiptService = () => new ReceiptService({ getPrisma });
 
 export const createCorsOptions = (configuredOrigins = process.env.CORS_ALLOWED_ORIGINS) => {
     const allowedOrigins = configuredOrigins
@@ -73,6 +75,7 @@ export const createApp = ({
     userProfileService = createDefaultUserProfileService(),
     outfitService = createDefaultOutfitService(),
     puzzleService = createDefaultPuzzleService(),
+    receiptService = createDefaultReceiptService(),
     authenticate = authenticateJwt,
     healthCheck = defaultHealthCheck,
     internalToken = process.env.INTERNAL_WORKER_TOKEN
@@ -84,6 +87,7 @@ export const createApp = ({
     app.locals.userProfileService = userProfileService;
     app.locals.outfitService = outfitService;
     app.locals.puzzleService = puzzleService;
+    app.locals.receiptService = receiptService;
 
     app.use(cors(createCorsOptions()));
     app.use(express.json());
@@ -93,7 +97,17 @@ export const createApp = ({
         index: false,
         maxAge: '1h'
     }));
-    app.use('/api', createIndexRouter({ imageService, authService, closetService, userProfileService, outfitService, puzzleService, authenticate, internalToken }));
+    app.use('/api', createIndexRouter({
+        imageService,
+        authService,
+        closetService,
+        userProfileService,
+        outfitService,
+        puzzleService,
+        receiptService,
+        authenticate,
+        internalToken
+    }));
 
     app.get('/health', async (req, res, next) => {
         try {
@@ -118,6 +132,13 @@ export const createApp = ({
             error.code = 'COMMON503';
             return next(error);
         }
+    });
+
+    app.use((req, res, next) => {
+        const error = new Error('요청한 API를 찾을 수 없습니다.');
+        error.status = 404;
+        error.code = 'NOT_FOUND404';
+        return next(error);
     });
 
     app.use(errorHandler);
