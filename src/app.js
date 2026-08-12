@@ -18,6 +18,7 @@ import { OutfitAiAdapter } from './services/outfit-ai.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
 import { UserProfileService } from './services/user-profile.service.js';
+import { ReceiptService } from './services/receipt.service.js';
 
 const createDefaultImageService = () => {
     const repository = new ImageRepository(getPrisma);
@@ -40,6 +41,7 @@ const createDefaultUserProfileService = () => new UserProfileService({ getPrisma
 const createDefaultOutfitService = () => new OutfitService({
     repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
 });
+const createDefaultReceiptService = () => new ReceiptService({ getPrisma });
 
 export const createCorsOptions = (configuredOrigins = process.env.CORS_ALLOWED_ORIGINS) => {
     const allowedOrigins = configuredOrigins
@@ -67,6 +69,7 @@ export const createApp = ({
     closetService = createDefaultClosetService(),
     userProfileService = createDefaultUserProfileService(),
     outfitService = createDefaultOutfitService(),
+    receiptService = createDefaultReceiptService(),
     authenticate = authenticateJwt,
     healthCheck = defaultHealthCheck,
     internalToken = process.env.INTERNAL_WORKER_TOKEN
@@ -77,6 +80,7 @@ export const createApp = ({
     app.locals.closetService = closetService;
     app.locals.userProfileService = userProfileService;
     app.locals.outfitService = outfitService;
+    app.locals.receiptService = receiptService;
 
     app.use(cors(createCorsOptions()));
     app.use(express.json());
@@ -86,7 +90,7 @@ export const createApp = ({
         index: false,
         maxAge: '1h'
     }));
-    app.use('/api', createIndexRouter({ imageService, authService, closetService, userProfileService, outfitService, authenticate, internalToken }));
+    app.use('/api', createIndexRouter({ imageService, authService, closetService, userProfileService, outfitService, receiptService, authenticate, internalToken }));
 
     app.get('/health', async (req, res, next) => {
         try {

@@ -50,6 +50,10 @@
 {
   "imageId": 12,
   "name": "흰색 셔츠",
+  "brand": "Fitty",
+  "colorText": "화이트",
+  "subCategory": "옥스퍼드 셔츠",
+  "memo": "봄 코디용",
   "size": "M",
   "category": "TOP",
   "importType": "MANUAL",
@@ -61,6 +65,10 @@
 | --- | --- | --- | --- |
 | `imageId` | positive integer | Y | 인증 사용자 소유의 `ACTIVE` `CLOSET_ITEM` 이미지 ID |
 | `name` | string | Y | 비어 있지 않은 아이템명 |
+| `brand` | string or null | N | 브랜드명 |
+| `colorText` | string or null | N | 사람이 읽을 수 있는 색상명 |
+| `subCategory` | string or null | N | 세부 카테고리 |
+| `memo` | string or null | N | 사용자 메모 |
 | `size` | string | Y | 비어 있지 않은 사이즈 |
 | `category` | string | Y | 비어 있지 않은 카테고리 |
 | `importType` | string | Y | 비어 있지 않은 등록 방식 |
@@ -75,7 +83,12 @@
   "message": "옷장 아이템 등록에 성공했습니다.",
   "result": {
     "item_id": 21,
+    "imageId": 12,
     "name": "흰색 셔츠",
+    "brand": "Fitty",
+    "colorText": "화이트",
+    "subCategory": "옥스퍼드 셔츠",
+    "memo": "봄 코디용",
     "size": "M",
     "category": "TOP",
     "import_type": "MANUAL",
@@ -117,7 +130,8 @@
 }
 ```
 
-- 수정 가능 필드는 `name`, `size`, `category`, `importType`, `tags`입니다.
+- 수정 가능 필드는 `name`, `brand`, `colorText`, `subCategory`, `memo`, `size`, `category`, `importType`, `tags`입니다.
+- `brand`, `colorText`, `subCategory`, `memo`는 `null`로 초기화할 수 있습니다.
 - 하나 이상의 수정 가능 필드를 전달해야 합니다.
 - `tags`를 전달하면 기존 태그 전체를 새 배열로 교체합니다.
 - `imageId`는 이 API에서 변경할 수 없습니다.
