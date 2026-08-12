@@ -12,8 +12,11 @@ const VALID_PLATFORMS = ['MUSINSA', 'ZIGZAG', 'ABLY', 'OFFLINE'];
 const VALID_CATEGORIES = ['TOP', 'BOTTOM', 'OUTER', 'SHOES', 'ACCESSORY', 'ETC']; 
 
 export class ReceiptService {
-    constructor({ prisma }) {
-        this.prisma = prisma;
+    constructor({ prisma, getPrisma } = {}) {
+        if (!prisma && !getPrisma) {
+            throw new TypeError('ReceiptService에는 prisma 또는 getPrisma가 필요합니다.');
+        }
+        this.getPrisma = getPrisma || (() => prisma);
     }
 
     // [API 1] OCR 처리
@@ -113,7 +116,8 @@ export class ReceiptService {
         }
 
         try {
-            const items = await this.prisma.closetItem.findMany({
+            const prisma = this.getPrisma();
+            const items = await prisma.closetItem.findMany({
                 where: { 
                     brand: brand, 
                     name: productName,
@@ -153,13 +157,14 @@ export class ReceiptService {
             }
         }
 
-        const userExists = await this.prisma.user.findUnique({ where: { id: userId } });
+        const prisma = this.getPrisma();
+        const userExists = await prisma.user.findUnique({ where: { id: userId } });
         if (!userExists) {
             throw createReceiptError(404, 'USER404_01', '존재하지 않는 회원입니다.');
         }
 
         try {
-            const resultCount = await this.prisma.$transaction(async (tx) => {
+            const resultCount = await prisma.$transaction(async (tx) => {
                 let savedCount = 0;
 
                 for (const item of items) {

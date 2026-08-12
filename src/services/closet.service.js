@@ -7,6 +7,14 @@ const requiredText = (value, field) => {
     return value.trim();
 };
 
+const optionalText = (value, field) => {
+    if (value === undefined || value === null) return value;
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        throw problem(400, 'CLOSET4001', `${field} 값은 문자열 또는 null이어야 합니다.`);
+    }
+    return value.trim();
+};
+
 const normalizeTags = (tags) => {
     if (tags === undefined) return undefined;
     if (!Array.isArray(tags)) throw problem(400, 'CLOSET4002', 'tags는 문자열 배열이어야 합니다.');
@@ -19,7 +27,12 @@ const normalizeTags = (tags) => {
 
 const toItemResponse = (item) => ({
     item_id: item.id,
+    imageId: item.imageId,
     name: item.name,
+    brand: item.brand,
+    colorText: item.colorText,
+    subCategory: item.subCategory,
+    memo: item.memo,
     size: item.size,
     category: item.category,
     import_type: item.importType,
@@ -28,7 +41,7 @@ const toItemResponse = (item) => ({
     subCategory: item.subCategory,
     memo: item.memo,
     tags: (item.tags || []).map((tag) => tag.tagName),
-    image_url: `/api/v1/images/${item.imageId}/content`,
+    image_url: item.imageId ? `/api/v1/images/${item.imageId}/content` : null,
     created_at: item.createdAt,
     updated_at: item.updatedAt
 });
@@ -137,7 +150,7 @@ export class ClosetService {
                 data[key] = (payload[key] === '' || payload[key] === null) ? null : payload[key];
             }
         });
-        
+
         if (tags !== undefined) data.tags = { deleteMany: {}, create: tags.map((tagName) => ({ tagName })) };
         if (Object.keys(data).length === 0) throw problem(400, 'CLOSET4005', '수정할 항목이 필요합니다.');
 
