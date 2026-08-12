@@ -135,7 +135,7 @@ test('register validates owned active closet image, ignores body userId, and lis
     assert.equal(created.body.result.memo, '봄 코디용');
     assert.equal(created.body.result.image_url, '/api/v1/images/10/content');
     const foreignList = await api.get('/api/v1/closets/items?userId=7').set('x-test-user-id', '8');
-    assert.deepEqual(foreignList.body.result, []);
+    assert.deepEqual(foreignList.body.result, { category_count: {}, closet_items: [] });
     for (const imageId of [11, 12, 13, 999]) {
         const response = await api.post('/api/v1/closets/items').set('x-test-user-id', '7').send({ ...validItem, imageId });
         assert.equal(response.status, 404);
