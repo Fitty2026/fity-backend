@@ -24,7 +24,9 @@ Authorization: Bearer <JWT_TOKEN>
 
 지급과 차감은 공개 API로 제공하지 않습니다. 회원가입, 출석, 공유, 코디 생성처럼 서버가 검증한 이벤트에서만 `PuzzleService.credit` 또는 `PuzzleService.debit`를 호출해야 합니다.
 
-모든 지급·차감은 사용자별 지갑과 거래 원장을 같은 DB transaction에서 갱신하며, 사용자별 `idempotencyKey`로 중복 반영을 막습니다.
+모든 지급·차감은 사용자별 지갑과 거래 원장을 같은 serializable DB transaction에서 갱신하며, 사용자별 `idempotencyKey`로 중복 반영을 막습니다. 동시에 같은 요청이 들어와도 기존 거래를 반환하고, 일시적인 DB 쓰기 충돌은 제한적으로 재시도합니다.
+
+같은 `idempotencyKey`를 사용할 때는 거래 유형, 금액, 사유, `referenceType`, `referenceId`가 모두 같아야 합니다. 하나라도 다르면 다른 거래로 판단합니다.
 
 ## 오류 코드
 

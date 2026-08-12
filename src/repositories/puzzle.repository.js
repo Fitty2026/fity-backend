@@ -16,8 +16,32 @@ export class PuzzleRepository {
         return wallet?.balance ?? 0;
     }
 
+    async runTransaction(command, operation, mapReplay) {
+        const prisma = this.prisma;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+                return await prisma.$transaction(operation, { isolationLevel: 'Serializable' });
+            } catch (error) {
+                if (error.code === 'P2002') {
+                    const existing = await prisma.puzzleTransaction.findUnique({
+                        where: {
+                            userId_idempotencyKey: {
+                                userId: command.userId,
+                                idempotencyKey: command.idempotencyKey
+                            }
+                        }
+                    });
+                    if (existing) return mapReplay(existing);
+                }
+                if (error.code !== 'P2034' || attempt === 2) throw error;
+            }
+        }
+        throw new Error('Puzzle transaction retry exhausted.');
+    }
+
     credit({ userId, amount, reason, idempotencyKey, referenceType, referenceId }) {
-        return this.prisma.$transaction(async (tx) => {
+        const command = { userId, amount, reason, idempotencyKey, referenceType, referenceId };
+        return this.runTransaction(command, async (tx) => {
             const existing = await tx.puzzleTransaction.findUnique({
                 where: { userId_idempotencyKey: { userId, idempotencyKey } }
             });
@@ -32,11 +56,12 @@ export class PuzzleRepository {
             return tx.puzzleTransaction.create({
                 data: { userId, type: 'CREDIT', amount, balanceAfter: wallet.balance, reason, idempotencyKey, referenceType, referenceId }
             });
-        }, { isolationLevel: 'Serializable' });
+        }, (existing) => existing);
     }
 
     debit({ userId, amount, reason, idempotencyKey, referenceType, referenceId }) {
-        return this.prisma.$transaction(async (tx) => {
+        const command = { userId, amount, reason, idempotencyKey, referenceType, referenceId };
+        return this.runTransaction(command, async (tx) => {
             const existing = await tx.puzzleTransaction.findUnique({
                 where: { userId_idempotencyKey: { userId, idempotencyKey } }
             });
@@ -58,6 +83,6 @@ export class PuzzleRepository {
                 data: { userId, type: 'DEBIT', amount, balanceAfter: wallet.balance, reason, idempotencyKey, referenceType, referenceId }
             });
             return { transaction, insufficient: false };
-        }, { isolationLevel: 'Serializable' });
+        }, (existing) => ({ transaction: existing, insufficient: false }));
     }
 }

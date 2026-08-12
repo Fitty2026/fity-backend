@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../src/app.js';
+import { PuzzleRepository } from '../src/repositories/puzzle.repository.js';
 import { PuzzleService } from '../src/services/puzzle.service.js';
 import { createAuthError } from '../src/middlewares/auth-context.middleware.js';
 
@@ -20,7 +21,10 @@ class MemoryPuzzleRepository {
         if (existing) return existing;
         const balanceAfter = (this.balances.get(command.userId) ?? 0) + command.amount;
         this.balances.set(command.userId, balanceAfter);
-        const transaction = { id: this.nextId++, type: 'CREDIT', amount: command.amount, balanceAfter, reason: command.reason };
+        const transaction = {
+            id: this.nextId++, type: 'CREDIT', amount: command.amount, balanceAfter,
+            reason: command.reason, referenceType: command.referenceType, referenceId: command.referenceId
+        };
         this.transactions.set(command.idempotencyKey, transaction);
         return transaction;
     }
@@ -32,7 +36,10 @@ class MemoryPuzzleRepository {
         if (balance < command.amount) return { transaction: null, insufficient: true };
         const balanceAfter = balance - command.amount;
         this.balances.set(command.userId, balanceAfter);
-        const transaction = { id: this.nextId++, type: 'DEBIT', amount: command.amount, balanceAfter, reason: command.reason };
+        const transaction = {
+            id: this.nextId++, type: 'DEBIT', amount: command.amount, balanceAfter,
+            reason: command.reason, referenceType: command.referenceType, referenceId: command.referenceId
+        };
         this.transactions.set(command.idempotencyKey, transaction);
         return { transaction, insufficient: false };
     }
@@ -115,5 +122,72 @@ describe('puzzle balance', () => {
             (error) => error.status === 409 && error.code === 'PUZZLE409_01'
         );
         assert.equal((await service.getBalance(1)).balance, 6);
+    });
+
+    it('rejects an idempotency key replay for another reference', async () => {
+        const service = new PuzzleService({ repository: new MemoryPuzzleRepository() });
+        const command = {
+            amount: 3,
+            reason: 'TEST_REWARD',
+            idempotencyKey: 'reward:1',
+            referenceType: 'ATTENDANCE',
+            referenceId: '2026-08-13'
+        };
+        await service.credit(1, command);
+
+        await assert.rejects(
+            () => service.credit(1, { ...command, referenceId: '2026-08-14' }),
+            (error) => error.status === 409 && error.code === 'PUZZLE409_02'
+        );
+    });
+
+    it('recovers a concurrent unique collision as an idempotent replay', async () => {
+        const existing = {
+            id: 9,
+            userId: 1,
+            type: 'CREDIT',
+            amount: 5,
+            balanceAfter: 5,
+            reason: 'TEST_GRANT',
+            idempotencyKey: 'grant:concurrent',
+            referenceType: null,
+            referenceId: null
+        };
+        const prisma = {
+            puzzleWallet: {},
+            puzzleTransaction: { findUnique: async () => existing },
+            $transaction: async () => { throw Object.assign(new Error('unique collision'), { code: 'P2002' }); }
+        };
+        const repository = new PuzzleRepository(prisma);
+
+        assert.equal((await repository.credit({
+            userId: 1,
+            amount: 5,
+            reason: 'TEST_GRANT',
+            idempotencyKey: 'grant:concurrent'
+        })).id, 9);
+    });
+
+    it('retries a serializable transaction conflict', async () => {
+        let attempts = 0;
+        const expected = { id: 10 };
+        const prisma = {
+            puzzleWallet: {},
+            puzzleTransaction: { findUnique: async () => null },
+            $transaction: async () => {
+                attempts += 1;
+                if (attempts < 3) throw Object.assign(new Error('write conflict'), { code: 'P2034' });
+                return expected;
+            }
+        };
+        const repository = new PuzzleRepository(prisma);
+
+        assert.equal((await repository.credit({
+            userId: 1,
+            amount: 5,
+            reason: 'TEST_GRANT',
+            idempotencyKey: 'grant:retry'
+        })).id, 10);
+        assert.equal(attempts, 3);
     });
 });

@@ -47,7 +47,11 @@ export class PuzzleService {
     }
 
     assertIdempotentReplay(transaction, type, command) {
-        if (transaction.type !== type || transaction.amount !== command.amount || transaction.reason !== command.reason) {
+        if (transaction.type !== type
+            || transaction.amount !== command.amount
+            || transaction.reason !== command.reason
+            || (transaction.referenceType ?? null) !== (command.referenceType ?? null)
+            || (transaction.referenceId ?? null) !== (command.referenceId ?? null)) {
             const error = new Error('The idempotency key was already used for another puzzle transaction.');
             error.status = 409;
             error.code = 'PUZZLE409_02';
