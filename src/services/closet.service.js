@@ -7,6 +7,14 @@ const requiredText = (value, field) => {
     return value.trim();
 };
 
+const optionalText = (value, field) => {
+    if (value === undefined || value === null) return value;
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        throw problem(400, 'CLOSET4001', `${field} 값은 문자열 또는 null이어야 합니다.`);
+    }
+    return value.trim();
+};
+
 const normalizeTags = (tags) => {
     if (tags === undefined) return undefined;
     if (!Array.isArray(tags)) throw problem(400, 'CLOSET4002', 'tags는 문자열 배열이어야 합니다.');
@@ -19,12 +27,17 @@ const normalizeTags = (tags) => {
 
 const toItemResponse = (item) => ({
     item_id: item.id,
+    imageId: item.imageId,
     name: item.name,
+    brand: item.brand,
+    colorText: item.colorText,
+    subCategory: item.subCategory,
+    memo: item.memo,
     size: item.size,
     category: item.category,
     import_type: item.importType,
     tags: (item.tags || []).map((tag) => tag.tagName),
-    image_url: `/api/v1/images/${item.imageId}/content`,
+    image_url: item.imageId ? `/api/v1/images/${item.imageId}/content` : null,
     created_at: item.createdAt,
     updated_at: item.updatedAt
 });
@@ -64,7 +77,11 @@ export class ClosetService {
             name: requiredText(payload.name, 'name'),
             size: requiredText(payload.size, 'size'),
             category: requiredText(payload.category, 'category'),
-            importType: requiredText(payload.importType, 'importType')
+            importType: requiredText(payload.importType, 'importType'),
+            brand: optionalText(payload.brand, 'brand'),
+            colorText: optionalText(payload.colorText, 'colorText'),
+            subCategory: optionalText(payload.subCategory, 'subCategory'),
+            memo: optionalText(payload.memo, 'memo')
         };
 
         return this.client.$transaction(async (tx) => {
@@ -101,10 +118,14 @@ export class ClosetService {
 
     async updateItem(userId, itemId, payload) {
         const tags = normalizeTags(payload.tags);
-        const editable = ['name', 'size', 'category', 'importType'];
-        const data = Object.fromEntries(editable
+        const requiredEditable = ['name', 'size', 'category', 'importType'];
+        const optionalEditable = ['brand', 'colorText', 'subCategory', 'memo'];
+        const data = Object.fromEntries(requiredEditable
             .filter((key) => payload[key] !== undefined)
             .map((key) => [key, requiredText(payload[key], key)]));
+        for (const key of optionalEditable) {
+            if (payload[key] !== undefined) data[key] = optionalText(payload[key], key);
+        }
         if (tags !== undefined) data.tags = { deleteMany: {}, create: tags.map((tagName) => ({ tagName })) };
         if (Object.keys(data).length === 0) throw problem(400, 'CLOSET4005', '수정할 항목이 필요합니다.');
 
