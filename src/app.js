@@ -41,7 +41,7 @@ const createDefaultUserProfileService = () => new UserProfileService({ getPrisma
 const createDefaultOutfitService = () => new OutfitService({
     repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
 });
-const createDefaultReceiptService = () => new ReceiptService({ prisma: getPrisma() });
+const createDefaultReceiptService = () => new ReceiptService({ getPrisma });
 
 export const createCorsOptions = (configuredOrigins = process.env.CORS_ALLOWED_ORIGINS) => {
     const allowedOrigins = configuredOrigins

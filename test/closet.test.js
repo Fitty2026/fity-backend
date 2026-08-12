@@ -82,7 +82,18 @@ const fixture = () => {
     const app = createApp({ closetService: new ClosetService({ prisma }), authenticate: authenticateForTest, healthCheck: async () => {} });
     return { prisma, api: request(app) };
 };
-const validItem = { imageId: 10, name: '셔츠', size: 'M', category: 'TOP', importType: 'MANUAL', tags: ['여름', '흰색'] };
+const validItem = {
+    imageId: 10,
+    name: '셔츠',
+    brand: 'Fitty',
+    colorText: '화이트',
+    subCategory: '옥스퍼드 셔츠',
+    memo: '봄 코디용',
+    size: 'M',
+    category: 'TOP',
+    importType: 'MANUAL',
+    tags: ['여름', '흰색']
+};
 
 test('Closet routes fail closed without req.auth.userId', async () => {
     const { api } = fixture();
@@ -117,6 +128,11 @@ test('register validates owned active closet image, ignores body userId, and lis
     const created = await api.post('/api/v1/closets/items').set('x-test-user-id', '7').send({ ...validItem, userId: 8 });
     assert.equal(created.status, 201);
     assert.deepEqual(created.body.result.tags, ['여름', '흰색']);
+    assert.equal(created.body.result.imageId, 10);
+    assert.equal(created.body.result.brand, 'Fitty');
+    assert.equal(created.body.result.colorText, '화이트');
+    assert.equal(created.body.result.subCategory, '옥스퍼드 셔츠');
+    assert.equal(created.body.result.memo, '봄 코디용');
     assert.equal(created.body.result.image_url, '/api/v1/images/10/content');
     const foreignList = await api.get('/api/v1/closets/items?userId=7').set('x-test-user-id', '8');
     assert.deepEqual(foreignList.body.result, []);
@@ -137,9 +153,21 @@ test('create and tag update are transactional, and CRUD is owner scoped', async 
     const itemId = made.body.result.item_id;
     const foreignGet = await api.get(`/api/v1/closets/items/${itemId}`).set('x-test-user-id', '8');
     assert.equal(foreignGet.status, 404);
-    const changed = await api.patch(`/api/v1/closets/items/${itemId}`).set('x-test-user-id', '7').send({ tags: ['가을'], userId: 8, imageId: 11 });
+    const changed = await api.patch(`/api/v1/closets/items/${itemId}`).set('x-test-user-id', '7').send({
+        tags: ['가을'],
+        brand: '수정 브랜드',
+        colorText: null,
+        subCategory: '긴팔 셔츠',
+        memo: '수정 메모',
+        userId: 8,
+        imageId: 11
+    });
     assert.equal(changed.status, 200);
     assert.deepEqual(changed.body.result.tags, ['가을']);
+    assert.equal(changed.body.result.brand, '수정 브랜드');
+    assert.equal(changed.body.result.colorText, null);
+    assert.equal(changed.body.result.subCategory, '긴팔 셔츠');
+    assert.equal(changed.body.result.memo, '수정 메모');
     assert.equal(changed.body.result.image_url, '/api/v1/images/10/content');
     const foreignDelete = await api.delete(`/api/v1/closets/items/${itemId}`).set('x-test-user-id', '8');
     assert.equal(foreignDelete.status, 404);
