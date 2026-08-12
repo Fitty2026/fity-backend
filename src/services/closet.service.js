@@ -23,6 +23,10 @@ const toItemResponse = (item) => ({
     size: item.size,
     category: item.category,
     import_type: item.importType,
+    brand: item.brand,
+    colorText: item.colorText,
+    subCategory: item.subCategory,
+    memo: item.memo,
     tags: (item.tags || []).map((tag) => tag.tagName),
     image_url: `/api/v1/images/${item.imageId}/content`,
     created_at: item.createdAt,
@@ -64,7 +68,11 @@ export class ClosetService {
             name: requiredText(payload.name, 'name'),
             size: requiredText(payload.size, 'size'),
             category: requiredText(payload.category, 'category'),
-            importType: requiredText(payload.importType, 'importType')
+            importType: requiredText(payload.importType, 'importType'),
+            brand: payload.brand || null,
+            colorText: payload.colorText || null,
+            subCategory: payload.subCategory || null,
+            memo: payload.memo || null
         };
 
         return this.client.$transaction(async (tx) => {
@@ -82,13 +90,26 @@ export class ClosetService {
     }
 
     async listItems(userId, { category, keyword }) {
-        const where = { userId };
+        const allItems = await this.client.closetItem.findMany({
+            where: { userId, deletedAt: null }
+        });
+        const category_count = allItems.reduce((acc, item) => {
+            acc[item.category] = (acc[item.category] || 0) + 1;
+            return acc;
+        }, {});
+        const where = { userId, deletedAt: null };
         if (typeof category === 'string' && category.trim()) where.category = category.trim();
         if (typeof keyword === 'string' && keyword.trim()) where.name = { contains: keyword.trim() };
         const items = await this.client.closetItem.findMany({
-            where, include: { tags: true }, orderBy: { createdAt: 'desc' }
+            where, 
+            include: { tags: true }, 
+            orderBy: { createdAt: 'desc' }
         });
-        return items.filter(item => !item.deletedAt).map(toItemResponse);
+        const closet_items = items.filter(item => !item.deletedAt).map(toItemResponse);
+        return {
+            category_count,
+            closet_items
+        };
     }
 
     async getItem(userId, itemId) {
@@ -101,10 +122,22 @@ export class ClosetService {
 
     async updateItem(userId, itemId, payload) {
         const tags = normalizeTags(payload.tags);
-        const editable = ['name', 'size', 'category', 'importType'];
-        const data = Object.fromEntries(editable
-            .filter((key) => payload[key] !== undefined)
-            .map((key) => [key, requiredText(payload[key], key)]));
+        const data = {};
+
+        const required = ['name', 'size', 'category', 'importType'];
+        required.forEach(key => {
+            if (payload[key] !== undefined) {
+                data[key] = requiredText(payload[key], key);
+            }
+        });
+        const optional = ['brand', 'colorText', 'subCategory', 'memo'];
+        optional.forEach(key => {
+            if (payload[key] !== undefined) {
+                // 프론트에서 빈 문자열('')이나 null을 보내면 DB에는 null로 비워서 저장
+                data[key] = (payload[key] === '' || payload[key] === null) ? null : payload[key];
+            }
+        });
+        
         if (tags !== undefined) data.tags = { deleteMany: {}, create: tags.map((tagName) => ({ tagName })) };
         if (Object.keys(data).length === 0) throw problem(400, 'CLOSET4005', '수정할 항목이 필요합니다.');
 
