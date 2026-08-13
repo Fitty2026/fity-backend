@@ -6,6 +6,12 @@ const JOB_TTL_MS = 10 * 60 * 1000;
 const RESULT_TTL_MS = 24 * 60 * 60 * 1000;
 const INPUT_SCHEMA_VERSION = 'outfit-input-v1';
 const DEFAULT_OUTFIT_GENERATION_PUZZLE_COST = 88;
+const IMAGE_CONTENT_PATH = /^\/api\/v1\/images\/(\d+)\/content(?:\?.*)?$/;
+const presentImageUrl = (imageUrl, imageUrlSigner) => {
+    if (!imageUrlSigner || typeof imageUrl !== 'string') return imageUrl;
+    const match = imageUrl.match(IMAGE_CONTENT_PATH);
+    return match ? imageUrlSigner.createSignedUrl(Number(match[1])) : imageUrl;
+};
 const isResultExpired = (result, now) => result.generationJob.status !== 'COMPLETED'
     || !result.generationJob.completedAt
     || now.getTime() - new Date(result.generationJob.completedAt).getTime() >= RESULT_TTL_MS;
@@ -84,7 +90,14 @@ const normalizeTags = (value) => {
     return normalized;
 };
 
-const DEFAULT_FALLBACK_IMAGE_URL = '/fallback/default-outfit.png';
+const DEFAULT_FALLBACK_IMAGE_URLS = [
+    '/fallback/mock-outfit-preview.jpg',
+    '/fallback/mock-outfit-leather.jpg',
+    '/fallback/mock-outfit-cardigan.jpg',
+    '/fallback/mock-outfit-striped.jpg',
+    '/fallback/mock-outfit-gray-knit.jpg'
+];
+const DEFAULT_FALLBACK_IMAGE_URL = DEFAULT_FALLBACK_IMAGE_URLS[0];
 const normalizeFallbackImageUrl = (value) => {
     if (typeof value !== 'string' || value.trim() === '') return DEFAULT_FALLBACK_IMAGE_URL;
     const candidate = value.trim();
@@ -156,7 +169,7 @@ const matchesGenerationInput = (job, input) => sameIds(job.closetItemIds, input.
     && (job.selectedDate ? new Date(job.selectedDate).toISOString().slice(0, 10) : null) === input.selectedDate
     && sameJson(job.weather, input.weather);
 
-const toJob = (job, { isExistingJob, includeInput = false, includeResult = true } = {}) => ({
+const toJob = (job, { isExistingJob, includeInput = false, includeResult = true, imageUrlSigner } = {}) => ({
     jobId: job.id,
     status: job.status.toLowerCase(),
     progress: job.progress,
@@ -167,12 +180,12 @@ const toJob = (job, { isExistingJob, includeInput = false, includeResult = true 
     ...(includeResult ? { outfitResultId: job.status === 'EXPIRED' ? null : job.result?.id ?? null } : {}),
     ...(includeResult ? {
         generatedImageUrl: job.result && job.status !== 'EXPIRED'
-            ? job.result.generatedImageUrl
+            ? presentImageUrl(job.result.generatedImageUrl, imageUrlSigner)
             : null
     } : {}),
     ...(includeResult ? { generatedImage: job.result && job.status !== 'EXPIRED' ? {
         outfitResultId: job.result.id,
-        imageUrl: job.result.generatedImageUrl,
+        imageUrl: presentImageUrl(job.result.generatedImageUrl, imageUrlSigner),
         provider: job.result.provider,
         modelVersion: job.result.modelVersion,
         promptVersion: job.result.promptVersion ?? null,
@@ -195,12 +208,12 @@ const toRevision = (job, revision) => ({
     expiresAt: job.expiresAt
 });
 
-const toSaved = (saved) => ({
+const toSaved = (saved, imageUrlSigner) => ({
     id: saved.id,
     savedOutfitId: saved.id,
     outfitResultId: saved.outfitResultId,
     name: saved.name,
-    imageUrl: saved.outfitResult.generatedImageUrl,
+    imageUrl: presentImageUrl(saved.outfitResult.generatedImageUrl, imageUrlSigner),
     modelVersion: saved.outfitResult.modelVersion,
     promptVersion: saved.outfitResult.promptVersion ?? null,
     items: saved.outfitResult.recommendedClosetItemIds,
@@ -227,8 +240,12 @@ export class OutfitService {
     constructor({
         repository,
         aiAdapter,
-        fallbackImageUrl = process.env.FALLBACK_OUTFIT_IMAGE_URL,
+        fallbackImageUrl,
+        fallbackImageUrls = fallbackImageUrl
+            ? [fallbackImageUrl]
+            : process.env.FALLBACK_OUTFIT_IMAGE_URLS?.split(',') ?? DEFAULT_FALLBACK_IMAGE_URLS,
         puzzleCost = Number(process.env.OUTFIT_GENERATION_PUZZLE_COST ?? DEFAULT_OUTFIT_GENERATION_PUZZLE_COST),
+        imageUrlSigner,
         now = () => new Date()
     }) {
         if (!Number.isSafeInteger(puzzleCost) || puzzleCost <= 0) {
@@ -236,9 +253,25 @@ export class OutfitService {
         }
         this.repository = repository;
         this.aiAdapter = aiAdapter;
-        this.fallbackImageUrl = normalizeFallbackImageUrl(fallbackImageUrl);
+        this.fallbackImageUrls = [...new Set(fallbackImageUrls.map(normalizeFallbackImageUrl))];
         this.puzzleCost = puzzleCost;
+        this.imageUrlSigner = imageUrlSigner;
         this.now = now;
+    }
+
+    toJob(job, options = {}) {
+        return toJob(job, { ...options, imageUrlSigner: this.imageUrlSigner });
+    }
+
+    toSaved(saved) {
+        return toSaved(saved, this.imageUrlSigner);
+    }
+
+    fallbackImageUrlFor(jobId) {
+        const index = Number.isSafeInteger(jobId) && jobId > 0
+            ? (jobId - 1) % this.fallbackImageUrls.length
+            : 0;
+        return this.fallbackImageUrls[index];
     }
 
     async createGenerationJob(userId, input = {}, rawIdempotencyKey) {
@@ -264,7 +297,7 @@ export class OutfitService {
             if (!matchesGenerationInput(existing, normalizedInput)) {
                 throw httpError(409, 'CONFLICT409', 'Idempotency-Key was already used with a different outfit request.');
             }
-            return toJob(existing, { isExistingJob: true, includeInput: true, includeResult: false });
+            return this.toJob(existing, { isExistingJob: true, includeInput: true, includeResult: false });
         }
         const ownedItemIds = await this.repository.findOwnedClosetItemIds(userId, closetItemIds);
         if (ownedItemIds.length !== closetItemIds.length) throw httpError(403, 'FORBIDDEN403', 'Closet item ownership check failed.');
@@ -307,7 +340,7 @@ export class OutfitService {
             }
         }
         const { job, isExistingJob } = created;
-        return toJob(job, { isExistingJob, includeInput: true, includeResult: false });
+        return this.toJob(job, { isExistingJob, includeInput: true, includeResult: false });
     }
 
     async getGenerationJob(userId, rawId) {
@@ -325,14 +358,14 @@ export class OutfitService {
             await this.repository.expireCompletedJob(job.id);
             job = await this.repository.findJob(userId, job.id);
         }
-        return toJob(job);
+        return this.toJob(job);
     }
 
     async getActiveGenerationJob(userId) {
         const now = this.now();
         await this.repository.expireStaleActiveJobs(userId, now);
         const job = await this.repository.findActiveJob(userId, now);
-        return job ? toJob(job, { isExistingJob: true, includeInput: true, includeResult: false }) : null;
+        return job ? this.toJob(job, { isExistingJob: true, includeInput: true, includeResult: false }) : null;
     }
 
     async createRevision(userId, rawResultId, input = {}, rawIdempotencyKey) {
@@ -444,7 +477,7 @@ export class OutfitService {
                     throw Object.assign(new Error('AI recommended an inaccessible closet item.'), { code: 'AI_INVALID_RECOMMENDATION' });
                 }
             } catch {
-                result = createFallbackResult(job, this.fallbackImageUrl);
+                result = createFallbackResult(job, this.fallbackImageUrlFor(job.id));
             }
             const transitioned = await this.repository.markQcPending(job.id);
             if (transitioned.count !== 1) throw new Error('Outfit job QC transition failed.');
@@ -481,7 +514,7 @@ export class OutfitService {
         if (!result) throw httpError(404, 'NOT_FOUND404', 'Outfit result was not found.');
         if (isResultExpired(result, this.now())) throw httpError(404, 'NOT_FOUND404', 'Outfit result is no longer available.');
         try {
-            return toSaved(await this.repository.saveResult({
+            return this.toSaved(await this.repository.saveResult({
                 userId, outfitResultId: result.id,
                 name: normalizeText(name, `${this.now().toISOString().slice(0, 10)} outfit`, 20, 'name'),
                 tags: normalizeTags(tags),
@@ -496,19 +529,19 @@ export class OutfitService {
     async getSavedOutfits(userId, query) {
         const { page, size } = pagination(query);
         const [items, totalCount] = await this.repository.listSaved(userId, (page - 1) * size, size, false);
-        return { items: items.map(toSaved), pagination: { page, size, totalCount } };
+        return { items: items.map((item) => this.toSaved(item)), pagination: { page, size, totalCount } };
     }
 
     async getDeletedSavedOutfits(userId, query) {
         const { page, size } = pagination(query);
         const [items, totalCount] = await this.repository.listSaved(userId, (page - 1) * size, size, true);
-        return { items: items.map(toSaved), pagination: { page, size, totalCount } };
+        return { items: items.map((item) => this.toSaved(item)), pagination: { page, size, totalCount } };
     }
 
     async getSavedOutfit(userId, rawId) {
         const saved = await this.repository.findSaved(userId, positiveId(rawId, 'savedOutfitId'));
         if (!saved) throw httpError(404, 'NOT_FOUND404', 'Saved outfit was not found.');
-        return toSaved(saved);
+        return this.toSaved(saved);
     }
 
     async updateSavedOutfit(userId, rawId, input = {}) {
@@ -519,7 +552,7 @@ export class OutfitService {
         if (Object.keys(data).length === 0) throw httpError(400, 'REQUEST400', 'At least one editable field is required.');
         const saved = await this.repository.updateSaved(userId, positiveId(rawId, 'savedOutfitId'), data);
         if (!saved) throw httpError(404, 'NOT_FOUND404', 'Saved outfit was not found.');
-        return toSaved(saved);
+        return this.toSaved(saved);
     }
 
     async deleteSavedOutfit(userId, rawId) {

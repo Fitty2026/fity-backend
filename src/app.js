@@ -51,7 +51,8 @@ const createDefaultOutfitAiAdapter = (imageService) => {
 };
 const createDefaultOutfitService = (imageService) => new OutfitService({
     repository: new OutfitRepository(getPrisma),
-    aiAdapter: createDefaultOutfitAiAdapter(imageService)
+    aiAdapter: createDefaultOutfitAiAdapter(imageService),
+    imageUrlSigner
 });
 const createDefaultPuzzleService = () => new PuzzleService({
     repository: new PuzzleRepository(getPrisma)

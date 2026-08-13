@@ -247,7 +247,7 @@ soft delete되지 않은 본인 소유 코디 한 건을 SAVED-02 항목과 같�
 - `OUTFIT_CLEANUP_INTERVAL_MS`: 10분 초과 진행 작업과 24시간 초과 미저장 결과를 정리하는 주기, 기본 60000ms
 - 원자적 `QUEUED -> PROCESSING` 전환으로 여러 worker가 같은 작업을 중복 처리하지 않습니다.
 - soft delete된 저장 코디도 영구 삭제 전까지 저장 결과로 간주하여 24시간 만료 대상에서 제외합니다.
-- AI 호출이 실패하거나 응답이 잘못되면 정적 fallback 결과를 저장합니다.
+- AI 호출이 실패하거나 응답이 잘못되면 제출 데모용 mock 이미지 5장 중 job별로 결정된 정적 fallback 결과를 저장합니다. `FALLBACK_OUTFIT_IMAGE_URLS`에서 쉼표로 구분해 교체할 수 있습니다.
 - AI 및 fallback 결과 저장 자체가 실패하면 job을 `failed`로 전환합니다.
 
 ## 주요 오류 코드
