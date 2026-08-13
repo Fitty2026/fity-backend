@@ -39,7 +39,6 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
                 userId: owner.id,
                 imageId: image.id,
                 name: 'Integration shirt',
-                size: 'M',
                 category: 'TOP',
                 importType: 'MANUAL'
             }

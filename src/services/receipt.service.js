@@ -8,7 +8,12 @@ const COLOR_DICTIONARY = {
     "네이비": "#000080", "NAVY": "#000080",
     "레드": "#FF0000", "RED": "#FF0000", "빨강": "#FF0000",
     "브라운": "#A52A2A", "BROWN": "#A52A2A", "갈색": "#A52A2A", "BRN": "#A52A2A",
-    "핑크": "#FFC0CB", "PINK": "#FFC0CB", "분홍": "#FFC0CB", "PNK": "#FFC0CB"
+    "핑크": "#FFC0CB", "PINK": "#FFC0CB", "분홍": "#FFC0CB", "PNK": "#FFC0CB",
+    "베이지": "#F5F5DC", "BEIGE": "#F5F5DC", "BEG": "#F5F5DC",
+    "블루": "#0000FF", "BLUE": "#0000FF", "파랑": "#0000FF", "BLU": "#0000FF",
+    "그린": "#008000", "GREEN": "#008000", "초록": "#008000", "GRN": "#008000",
+    "옐로우": "#FFFF00", "YELLOW": "#FFFF00", "노랑": "#FFFF00", "YEL": "#FFFF00",
+    "멀티": "#MULTI", "MULTI": "#MULTI", "알록달록": "#MULTI"
 };
 
 const createReceiptError = (status, code, message, cause) => {
@@ -154,7 +159,6 @@ export class ReceiptService {
                 take: 3
             });
 
-            // 매핑된 사진이 없으면 빈 배열 [] 반환 (정상 응답)
             return items.map(item => this.imageUrlSigner.createSignedUrl(item.imageId));
         } catch (cause) {
             console.error("🔥 [findRelatedImages] 진짜 DB 에러 상세 내용:", cause);
