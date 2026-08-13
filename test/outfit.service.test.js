@@ -206,6 +206,29 @@ describe('OutfitService', () => {
         });
         assert.equal(result.failure, null);
     });
+    it('returns a browser-loadable signed URL for stored generated images', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({
+            repository,
+            aiAdapter: {
+                generate: async () => ({
+                    generatedImageUrl: '/api/v1/images/99/content',
+                    provider: 'test-ai',
+                    modelVersion: 'test-v1',
+                    fallbackUsed: false,
+                    recommendedClosetItemIds: [4]
+                })
+            },
+            imageUrlSigner: {
+                createSignedUrl: (imageId) => `/api/v1/images/${imageId}/content?expires=123&signature=signed`
+            }
+        });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] });
+        await service.processGenerationJob(created.jobId);
+        const result = await service.getGenerationJob(1, created.jobId);
+        assert.equal(result.generatedImageUrl, '/api/v1/images/99/content?expires=123&signature=signed');
+        assert.equal(result.generatedImage.imageUrl, result.generatedImageUrl);
+    });
     it('completes with fallback when the AI adapter is not configured', async () => {
         const repository = new MemoryOutfitRepository();
         const service = new OutfitService({ repository, aiAdapter: new OutfitAiAdapter({ endpoint: undefined }) });
