@@ -54,7 +54,7 @@
   "colorText": "화이트",
   "subCategory": "옥스퍼드 셔츠",
   "memo": "봄 코디용",
-  "size": "M",
+  "colorHex": "#FFFFFF",
   "category": "TOP",
   "importType": "MANUAL",
   "tags": ["여름", "흰색"]
@@ -69,7 +69,7 @@
 | `colorText` | string or null | N | 사람이 읽을 수 있는 색상명 |
 | `subCategory` | string or null | N | 세부 카테고리 |
 | `memo` | string or null | N | 사용자 메모 |
-| `size` | string | Y | 비어 있지 않은 사이즈 |
+| `colorHex` | string | N | `#RRGGBB` 형식의 색상 코드 |
 | `category` | string | Y | 비어 있지 않은 카테고리 |
 | `importType` | string | Y | 비어 있지 않은 등록 방식 |
 | `tags` | string[] | Y | 한 개 이상이며 중복과 빈 문자열이 없는 태그 배열 |
@@ -89,7 +89,7 @@
     "colorText": "화이트",
     "subCategory": "옥스퍼드 셔츠",
     "memo": "봄 코디용",
-    "size": "M",
+    "colorHex": "#FFFFFF",
     "category": "TOP",
     "import_type": "MANUAL",
     "tags": ["여름", "흰색"],
@@ -130,7 +130,7 @@
 }
 ```
 
-- 수정 가능 필드는 `name`, `brand`, `colorText`, `subCategory`, `memo`, `size`, `category`, `importType`, `tags`입니다.
+- 수정 가능 필드는 `name`, `brand`, `colorText`, `colorHex`, `subCategory`, `memo`, `category`, `importType`, `tags`입니다.
 - `brand`, `colorText`, `subCategory`, `memo`는 `null`로 초기화할 수 있습니다.
 - 하나 이상의 수정 가능 필드를 전달해야 합니다.
 - `tags`를 전달하면 기존 태그 전체를 새 배열로 교체합니다.
@@ -160,6 +160,6 @@
 ## 배포 전 조건
 
 - 운영 MySQL/MariaDB에 옷장 관련 마이그레이션을 적용하고 실제 트랜잭션 동작을 확인해야 합니다.
-- `category`, `size`, `importType`, `platform`의 팀 공통 enum 또는 허용값 계약은 현재 서비스에서 강제하지 않으므로 프론트엔드와 확정해야 합니다.
+- `category`, `importType`, `platform`의 팀 공통 enum 또는 허용값 계약은 현재 서비스에서 강제하지 않으므로 프론트엔드와 확정해야 합니다.
 - 쇼핑몰 구매내역 연동은 공식 API·제휴·OAuth 권한이 확보된 뒤 별도 구현해야 합니다.
 - 이미지 삭제와 옷장 아이템 참조 해제 순서는 운영 정책으로 확정해야 합니다.

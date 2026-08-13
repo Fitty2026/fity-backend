@@ -31,9 +31,9 @@ const toItemResponse = (item, imageUrlSigner) => ({
     name: item.name,
     brand: item.brand,
     colorText: item.colorText,
+    colorHex: item.colorHex,
     subCategory: item.subCategory,
     memo: item.memo,
-    size: item.size,
     category: item.category,
     import_type: item.importType,
     tags: (item.tags || []).map((tag) => tag.tagName),
@@ -76,11 +76,11 @@ export class ClosetService {
             userId,
             imageId,
             name: requiredText(payload.name, 'name'),
-            size: requiredText(payload.size, 'size'),
             category: requiredText(payload.category, 'category'),
             importType: requiredText(payload.importType, 'importType'),
             brand: payload.brand || null,
             colorText: payload.colorText || null,
+            colorHex: payload.colorHex || null,
             subCategory: payload.subCategory || null,
             memo: payload.memo || null
         };
@@ -136,13 +136,13 @@ export class ClosetService {
         const tags = normalizeTags(payload.tags);
         const data = {};
 
-        const required = ['name', 'size', 'category', 'importType'];
+        const required = ['name', 'category', 'importType'];
         required.forEach(key => {
             if (payload[key] !== undefined) {
                 data[key] = requiredText(payload[key], key);
             }
         });
-        const optional = ['brand', 'colorText', 'subCategory', 'memo'];
+        const optional = ['brand', 'colorText', 'colorHex', 'subCategory', 'memo'];
         optional.forEach(key => {
             if (payload[key] !== undefined) {
                 // 프론트에서 빈 문자열('')이나 null을 보내면 DB에는 null로 비워서 저장
