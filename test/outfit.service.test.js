@@ -463,6 +463,101 @@ describe('OutfitAiAdapter', () => {
 });
 
 describe('OutfitRepository', () => {
+    it('creates a new job and debits its puzzle cost in the same transaction', async () => {
+        let balance = 176;
+        const transactions = [];
+        const tx = {
+            outfitGenerationJob: {
+                findFirst: async () => null,
+                updateMany: async () => ({ count: 0 }),
+                create: async ({ data }) => ({ id: 31, status: 'QUEUED', ...data })
+            },
+            puzzleWallet: {
+                upsert: async () => ({ userId: 1, balance }),
+                updateMany: async ({ where, data }) => {
+                    if (balance < where.balance.gte) return { count: 0 };
+                    balance -= data.balance.decrement;
+                    return { count: 1 };
+                },
+                findUniqueOrThrow: async () => ({ userId: 1, balance })
+            },
+            puzzleTransaction: {
+                create: async ({ data }) => { transactions.push(data); return data; }
+            }
+        };
+        const repository = new OutfitRepository({
+            outfitGenerationJob: {},
+            $transaction: async (operation) => operation(tx)
+        });
+
+        const result = await repository.createOrFindActiveJob(
+            { userId: 1, closetItemIds: [4], styleTagIds: [], expiresAt: new Date('2026-08-13T00:10:00Z') },
+            new Date('2026-08-13T00:00:00Z'),
+            { amount: 88 }
+        );
+
+        assert.equal(result.isExistingJob, false);
+        assert.equal(balance, 88);
+        assert.deepEqual(transactions[0], {
+            userId: 1,
+            type: 'DEBIT',
+            amount: 88,
+            balanceAfter: 88,
+            reason: 'OUTFIT_GENERATION',
+            idempotencyKey: 'outfit-generation:31',
+            referenceType: 'OUTFIT_GENERATION_JOB',
+            referenceId: '31'
+        });
+    });
+
+    it('does not debit puzzles when returning an existing active job', async () => {
+        let walletTouched = false;
+        const active = { id: 9, userId: 1, status: 'PROCESSING' };
+        const repository = new OutfitRepository({
+            outfitGenerationJob: {},
+            $transaction: async (operation) => operation({
+                outfitGenerationJob: { findFirst: async () => active },
+                puzzleWallet: { upsert: async () => { walletTouched = true; } }
+            })
+        });
+
+        const result = await repository.createOrFindActiveJob(
+            { userId: 1 },
+            new Date('2026-08-13T00:00:00Z'),
+            { amount: 88 }
+        );
+
+        assert.equal(result.isExistingJob, true);
+        assert.equal(walletTouched, false);
+    });
+
+    it('rejects a new job when the puzzle balance is insufficient', async () => {
+        const tx = {
+            outfitGenerationJob: {
+                findFirst: async () => null,
+                updateMany: async () => ({ count: 0 }),
+                create: async ({ data }) => ({ id: 32, status: 'QUEUED', ...data })
+            },
+            puzzleWallet: {
+                upsert: async () => ({ userId: 1, balance: 10 }),
+                updateMany: async () => ({ count: 0 })
+            }
+        };
+        const repository = new OutfitRepository({
+            outfitGenerationJob: {},
+            $transaction: async (operation) => operation(tx)
+        });
+
+        await assert.rejects(
+            () => repository.createOrFindActiveJob(
+                { userId: 1 },
+                new Date('2026-08-13T00:00:00Z'),
+                { amount: 88 }
+            ),
+            (error) => error.status === 409 && error.code === 'PUZZLE409_01'
+        );
+    });
+
     it('returns the related outfit result when a saved outfit is created', async () => {
         let createArgs;
         const repository = new OutfitRepository({

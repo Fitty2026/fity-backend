@@ -16,7 +16,8 @@ const expectedOperations = [
     ['patch', '/outfits/saved/{savedOutfitId}'],
     ['delete', '/outfits/saved/{savedOutfitId}'],
     ['post', '/outfits/saved/{savedOutfitId}/restore'],
-    ['delete', '/outfits/saved/{savedOutfitId}/permanent']
+    ['delete', '/outfits/saved/{savedOutfitId}/permanent'],
+    ['get', '/puzzles/balance']
 ];
 
 describe('BE4 OpenAPI contract', () => {
@@ -39,5 +40,12 @@ describe('BE4 OpenAPI contract', () => {
             specification.components.schemas.Job.properties.status.enum,
             ['queued', 'processing', 'qc_pending', 'completed', 'failed', 'expired']
         );
+    });
+
+    it('documents the authenticated puzzle balance contract', () => {
+        const schema = specification.components.schemas.PuzzleBalance;
+        assert.deepEqual(schema.required, ['balance', 'currency']);
+        assert.equal(schema.properties.balance.minimum, 0);
+        assert.equal(schema.properties.currency.const, 'PUZZLE');
     });
 });

@@ -9,7 +9,7 @@ export class OutfitRepository {
         return prisma;
     }
 
-    async createOrFindActiveJob(data, now = new Date()) {
+    async createOrFindActiveJob(data, now = new Date(), puzzleCharge = null) {
         return this.prisma.$transaction(async (tx) => {
             const active = await tx.outfitGenerationJob.findFirst({
                 where: { userId: data.userId, status: { in: ['QUEUED', 'PROCESSING', 'QC_PENDING'] }, expiresAt: { gt: now } },
@@ -21,6 +21,36 @@ export class OutfitRepository {
                 data: { status: 'EXPIRED', failureCode: 'JOB_TIMEOUT', failureReason: 'Outfit generation job expired.', completedAt: now }
             });
             const job = await tx.outfitGenerationJob.create({ data });
+            if (puzzleCharge) {
+                await tx.puzzleWallet.upsert({
+                    where: { userId: data.userId },
+                    create: { userId: data.userId, balance: 0 },
+                    update: {}
+                });
+                const debited = await tx.puzzleWallet.updateMany({
+                    where: { userId: data.userId, balance: { gte: puzzleCharge.amount } },
+                    data: { balance: { decrement: puzzleCharge.amount } }
+                });
+                if (debited.count !== 1) {
+                    throw Object.assign(new Error('Puzzle balance is insufficient.'), {
+                        status: 409,
+                        code: 'PUZZLE409_01'
+                    });
+                }
+                const wallet = await tx.puzzleWallet.findUniqueOrThrow({ where: { userId: data.userId } });
+                await tx.puzzleTransaction.create({
+                    data: {
+                        userId: data.userId,
+                        type: 'DEBIT',
+                        amount: puzzleCharge.amount,
+                        balanceAfter: wallet.balance,
+                        reason: 'OUTFIT_GENERATION',
+                        idempotencyKey: `outfit-generation:${job.id}`,
+                        referenceType: 'OUTFIT_GENERATION_JOB',
+                        referenceId: String(job.id)
+                    }
+                });
+            }
             return { job, isExistingJob: false };
         }, { isolationLevel: 'Serializable' });
     }
