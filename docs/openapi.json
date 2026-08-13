@@ -202,6 +202,7 @@
           "isExistingJob": { "type": "boolean" },
           "expiresAt": { "type": "string", "format": "date-time" },
           "outfitResultId": { "type": [ "integer", "null" ] },
+          "generatedImageUrl": { "type": [ "string", "null" ], "description": "Compatibility alias of generatedImage.imageUrl." },
           "generatedImage": { "type": [ "object", "null" ] },
           "failure": { "type": [ "object", "null" ] }
         }

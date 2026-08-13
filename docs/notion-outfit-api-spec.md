@@ -149,6 +149,7 @@
     "inputSchemaVersion": "outfit-input-v1",
     "expiresAt": "2026-07-31T12:10:00.000Z",
     "outfitResultId": null,
+    "generatedImageUrl": null,
     "generatedImage": null,
     "failure": null,
     "createdAt": "2026-07-31T12:00:00.000Z",
