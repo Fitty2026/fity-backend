@@ -84,7 +84,14 @@ const normalizeTags = (value) => {
     return normalized;
 };
 
-const DEFAULT_FALLBACK_IMAGE_URL = '/fallback/default-outfit.png';
+const DEFAULT_FALLBACK_IMAGE_URLS = [
+    '/fallback/mock-outfit-preview.jpg',
+    '/fallback/mock-outfit-leather.jpg',
+    '/fallback/mock-outfit-cardigan.jpg',
+    '/fallback/mock-outfit-striped.jpg',
+    '/fallback/mock-outfit-gray-knit.jpg'
+];
+const DEFAULT_FALLBACK_IMAGE_URL = DEFAULT_FALLBACK_IMAGE_URLS[0];
 const normalizeFallbackImageUrl = (value) => {
     if (typeof value !== 'string' || value.trim() === '') return DEFAULT_FALLBACK_IMAGE_URL;
     const candidate = value.trim();
@@ -227,7 +234,10 @@ export class OutfitService {
     constructor({
         repository,
         aiAdapter,
-        fallbackImageUrl = process.env.FALLBACK_OUTFIT_IMAGE_URL,
+        fallbackImageUrl,
+        fallbackImageUrls = fallbackImageUrl
+            ? [fallbackImageUrl]
+            : process.env.FALLBACK_OUTFIT_IMAGE_URLS?.split(',') ?? DEFAULT_FALLBACK_IMAGE_URLS,
         puzzleCost = Number(process.env.OUTFIT_GENERATION_PUZZLE_COST ?? DEFAULT_OUTFIT_GENERATION_PUZZLE_COST),
         now = () => new Date()
     }) {
@@ -236,9 +246,16 @@ export class OutfitService {
         }
         this.repository = repository;
         this.aiAdapter = aiAdapter;
-        this.fallbackImageUrl = normalizeFallbackImageUrl(fallbackImageUrl);
+        this.fallbackImageUrls = [...new Set(fallbackImageUrls.map(normalizeFallbackImageUrl))];
         this.puzzleCost = puzzleCost;
         this.now = now;
+    }
+
+    fallbackImageUrlFor(jobId) {
+        const index = Number.isSafeInteger(jobId) && jobId > 0
+            ? (jobId - 1) % this.fallbackImageUrls.length
+            : 0;
+        return this.fallbackImageUrls[index];
     }
 
     async createGenerationJob(userId, input = {}, rawIdempotencyKey) {
@@ -444,7 +461,7 @@ export class OutfitService {
                     throw Object.assign(new Error('AI recommended an inaccessible closet item.'), { code: 'AI_INVALID_RECOMMENDATION' });
                 }
             } catch {
-                result = createFallbackResult(job, this.fallbackImageUrl);
+                result = createFallbackResult(job, this.fallbackImageUrlFor(job.id));
             }
             const transitioned = await this.repository.markQcPending(job.id);
             if (transitioned.count !== 1) throw new Error('Outfit job QC transition failed.');

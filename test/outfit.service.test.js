@@ -192,11 +192,11 @@ describe('OutfitService', () => {
         await service.processGenerationJob(created.jobId);
         const result = await service.getGenerationJob(1, created.jobId);
         assert.equal(result.status, 'completed');
-        assert.equal(result.generatedImageUrl, '/fallback/default-outfit.png');
+        assert.equal(result.generatedImageUrl, '/fallback/mock-outfit-preview.jpg');
         assert.equal(result.generatedImageUrl, result.generatedImage.imageUrl);
         assert.deepEqual(result.generatedImage, {
             outfitResultId: 2,
-            imageUrl: '/fallback/default-outfit.png',
+            imageUrl: '/fallback/mock-outfit-preview.jpg',
             provider: 'fitty-fallback',
             modelVersion: 'fallback-v1',
             promptVersion: null,
@@ -214,7 +214,7 @@ describe('OutfitService', () => {
         const result = await service.getGenerationJob(1, created.jobId);
         assert.equal(result.status, 'completed');
         assert.equal(result.generatedImage.fallbackUsed, true);
-        assert.equal(result.generatedImage.imageUrl, '/fallback/default-outfit.png');
+        assert.equal(result.generatedImage.imageUrl, '/fallback/mock-outfit-preview.jpg');
     });
     it('scopes saved outfit lifecycle to its owner', async () => {
         const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
@@ -389,7 +389,21 @@ describe('OutfitService', () => {
         const created = await service.createGenerationJob(1, { closetItemIds: [4] });
         await service.processGenerationJob(created.jobId);
         const job = await service.getGenerationJob(1, created.jobId);
-        assert.equal(job.generatedImage.imageUrl, '/fallback/default-outfit.png');
+        assert.equal(job.generatedImage.imageUrl, '/fallback/mock-outfit-preview.jpg');
+    });
+
+    it('rotates across every packaged mock fallback image', () => {
+        const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
+        assert.deepEqual(
+            [1, 2, 3, 4, 5].map((jobId) => service.fallbackImageUrlFor(jobId)),
+            [
+                '/fallback/mock-outfit-preview.jpg',
+                '/fallback/mock-outfit-leather.jpg',
+                '/fallback/mock-outfit-cardigan.jpg',
+                '/fallback/mock-outfit-striped.jpg',
+                '/fallback/mock-outfit-gray-knit.jpg'
+            ]
+        );
     });
 });
 
@@ -590,6 +604,15 @@ describe('Outfit HTTP auth boundary', () => {
         assert.equal(response.status, 200);
         assert.equal(response.headers['content-type'], 'image/png');
         assert.deepEqual([...response.body.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    });
+    it('serves all packaged mock outfit images without authentication', async () => {
+        const app = createApp({ outfitService: new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter }), healthCheck: async () => {} });
+        for (const name of ['preview', 'leather', 'cardigan', 'striped', 'gray-knit']) {
+            const response = await request(app).get(`/fallback/mock-outfit-${name}.jpg`);
+            assert.equal(response.status, 200);
+            assert.equal(response.headers['content-type'], 'image/jpeg');
+            assert.deepEqual([...response.body.subarray(0, 3)], [0xff, 0xd8, 0xff]);
+        }
     });
     it('uses the JWT subject for outfit creation and rejects unauthenticated requests', async () => {
         const repository = new MemoryOutfitRepository();
