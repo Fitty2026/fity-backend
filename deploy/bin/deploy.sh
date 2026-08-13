@@ -77,6 +77,7 @@ applied_migrations="$(
 compose --profile tools run --rm \
     --entrypoint node \
     --env "APPLIED_MIGRATIONS=${applied_migrations}" \
+    --env "ALLOW_DESTRUCTIVE_MIGRATIONS=${ALLOW_DESTRUCTIVE_MIGRATIONS:-false}" \
     migrate \
     /app/scripts/check-migrations.mjs
 compose --profile tools run --rm migrate
