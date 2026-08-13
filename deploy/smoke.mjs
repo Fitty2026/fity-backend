@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { getPrisma, disconnectPrisma } from '../src/config/prisma.js';
+import { PuzzleRepository } from '../src/repositories/puzzle.repository.js';
+import { PuzzleService } from '../src/services/puzzle.service.js';
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000';
 const runId = `${process.env.APP_VERSION || 'local'}-${Date.now()}`.replace(/[^a-zA-Z0-9]/g, '').slice(-24);
@@ -33,6 +36,18 @@ await request('/api/v1/auth/signup', json('POST', {
 const login = await request('/api/v1/auth/login', json('POST', { email, password }));
 assert.match(login.accessToken, /^[\w-]+\.[\w-]+\.[\w-]+$/);
 const token = login.accessToken;
+const tokenPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+const smokeUserId = Number(tokenPayload.sub);
+assert.ok(Number.isSafeInteger(smokeUserId) && smokeUserId > 0, 'smoke JWT subject is invalid');
+
+const puzzleService = new PuzzleService({ repository: new PuzzleRepository(getPrisma) });
+await puzzleService.credit(smokeUserId, {
+    amount: Number(process.env.OUTFIT_GENERATION_PUZZLE_COST || 88),
+    reason: 'STAGING_SMOKE_GRANT',
+    idempotencyKey: `staging-smoke-grant:${runId}`,
+    referenceType: 'STAGING_SMOKE',
+    referenceId: runId
+});
 
 await request('/api/v1/closets/items', {
     headers: { authorization: `Bearer ${token}` }
@@ -103,4 +118,5 @@ await request(`/api/v1/images/${uploaded.imageId}`, {
     headers: { authorization: `Bearer ${token}` }
 });
 
+await disconnectPrisma();
 console.log(`Fitty staging smoke passed: ${process.env.APP_VERSION || 'local'}`);
