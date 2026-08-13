@@ -22,6 +22,10 @@
 7. 원격 `DockerNetworkAutoSettings`를 Fitty 프로젝트에 one-shot 적용해 `api.network.env` 라우팅을 Compose에 병합합니다.
 8. `https://fitty.gubiko.dev/health`가 성공하면 `EXTERNAL_HEALTH_REQUIRED=true`로 바꾸고 user timer를 설치합니다.
 
+`ALLOW_DESTRUCTIVE_MIGRATIONS=true`이면 배포 전 백업이 성공한 뒤 `DROP COLUMN` 같은
+파괴적 migration도 자동 적용합니다. `-- FITTY: MANUAL_DEPLOY_REQUIRED` 표식이 있는
+migration은 이 설정과 관계없이 계속 차단됩니다.
+
 `api.network.env`의 `PORT=3000`은 호스트 포트가 아니라 Traefik이 연결할 컨테이너 내부 포트입니다. `NAME=fitty-api`이므로 Docker 컨테이너와 Traefik router/service 이름 모두 `fitty-api`를 사용합니다.
 
 ## 일상 명령
