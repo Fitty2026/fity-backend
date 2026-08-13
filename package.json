@@ -26,10 +26,13 @@
   },
   "homepage": "https://github.com/Fitty2026/fity-backend#readme",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@mediapipe/tasks-vision": "^1.0.1",
     "@prisma/adapter-mariadb": "^7.9.0",
     "@prisma/client": "^7.9.0",
     "axios": "^1.19.0",
     "bcrypt": "^6.0.0",
+    "canvas": "^3.2.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",

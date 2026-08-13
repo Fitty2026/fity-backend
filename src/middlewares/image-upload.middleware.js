@@ -86,23 +86,27 @@ export const uploadBodyProfileImages = (req, res, next) => {
         return next(error);
     }
 
-    const multiUpload = uploadBodyProfileStorage.fields([
-        { name: 'frontImage', maxCount: 1 },
-        { name: 'sideImage', maxCount: 1 },
-        { name: 'backImage', maxCount: 1 }
-    ]);
+    const arrayUpload = uploadBodyProfileStorage.array('images', 3);
 
-    multiUpload(req, res, (error) => {
+    arrayUpload(req, res, (error) => {
         if (!error) {
             return next();
         }
 
         if (error instanceof multer.MulterError) {
-            error.status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
-            error.code = error.code === 'LIMIT_FILE_SIZE' ? 'IMAGE4131' : 'IMAGE4003';
-            error.message = error.status === 413
-                ? '이미지 크기는 10MB 이하여야 합니다.'
-                : '이미지 업로드 요청 형식이 올바르지 않습니다.';
+            if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+                error.status = 400;
+                error.code = 'IMAGE4003';
+                error.message = '체형 사진은 최대 3장까지 업로드 가능합니다.';
+            } else if (error.code === 'LIMIT_FILE_SIZE') {
+                error.status = 413;
+                error.code = 'IMAGE4131';
+                error.message = '이미지 크기는 10MB 이하여야 합니다.';
+            } else {
+                error.status = 400;
+                error.code = 'IMAGE4003';
+                error.message = '이미지 업로드 요청 형식이 올바르지 않습니다.';
+            }
         } else if (error.code !== 'IMAGE4151') {
             error.status = 400;
             error.code = 'IMAGE4003';

@@ -1,3 +1,6 @@
+import { extractBodyLandmarks } from '../utils/mediapipe.util.js';
+import { analyzeWithGemini } from '../utils/gemini.util.js';
+
 const problem = (status, code, message) => Object.assign(new Error(message), { status, code });
 const USER_FIELDS = new Set(['name']);
 const BODY_FIELDS = new Set(['bodyBalance', 'shoulderWidth', 'frameSize']);
@@ -305,20 +308,43 @@ export class UserProfileService {
         const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
         if (!user) throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
 
-        const front = files?.frontImage?.[0];
-        const side = files?.sideImage?.[0];
-        const back = files?.backImage?.[0];
+        const imageFiles = files; 
 
-        if (!front || !side || !back) {
+        if (!imageFiles || imageFiles.length !== 3) {
             throw problem(400, 'PROFILE400_05', '정면, 측면, 후면 사진 총 3장을 모두 첨부해 주세요.');
         }
+        try {
+            // MediaPipe 관절 비율 계산
+            const calculatedRatios = await extractBodyLandmarks(imageFiles[0].buffer);
 
-        // TODO: 향후 이 부분에 실제 S3 이미지 업로드 및 AI 서버 연동 로직이 들어갑니다.
-        // 현재는 프론트엔드 UI 연동 테스트를 위해 명세서 규격과 똑같은 Mock 데이터를 반환합니다.
+            // Gemini 3.1 Flash-Lite AI 엔진 호출 (순서 상관없이 사진 3장 전달)
+            const aiAnalysis = await analyzeWithGemini({
+                images: imageFiles.map(file => ({ 
+                    buffer: file.buffer, 
+                    mimeType: file.mimetype 
+                })),
+                ratios: calculatedRatios
+            });
 
-        const mockResult = stubDetailedBodyAnalysis(userId);
+            const session = await this.client.bodyAnalysisSession.create({
+                data: {
+                    userId: userId,
+                    resultData: aiAnalysis, // Gemini가 반환한 전체 JSON 결과
+                    expiresAt: new Date(Date.now() + 30 * 60 * 1000) // 30분 뒤 만료
+                }
+            });
+            const analysisId = session.id;
 
-        return mockResult; 
+            return {
+                analysisId: analysisId,
+                measurements: aiAnalysis.measurements, 
+                bodyTypeResult: aiAnalysis.bodyTypeResult
+            };
+
+        } catch (error) {
+            console.error("🔥 [체형 분석 에러]:", error);
+            throw problem(500, 'PROFILE500_01', 'AI 체형 분석 중 오류가 발생했습니다. 다시 시도해 주세요.');
+        }
     }
 
     async saveBodyProfile(userId, payload) {
