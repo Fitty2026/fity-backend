@@ -23,5 +23,13 @@ export const createAuthController = (authService) => ({
         } catch (error) {
             return next(error);
         }
+    },
+    socialLogin: async (req, res, next) => {
+        try {
+            const result = await authService.socialLogin(req.body || {});
+            return sendResponse(res, result, '소셜 로그인에 성공했습니다.');
+        } catch (error) {
+            return next(error);
+        }
     }
 });

@@ -24,14 +24,14 @@ const publicUser = (user) => ({
     updatedAt: user.updatedAt
 });
 
-const publicBodyProfile = (profile) => ({
-    id: profile.id,
-    bodyBalance: profile.bodyBalance,
-    shoulderWidth: profile.shoulderWidth,
-    frameSize: profile.frameSize,
-    createdAt: profile.createdAt,
-    updatedAt: profile.updatedAt
-});
+// const publicBodyProfile = (profile) => ({
+//     id: profile.id,
+//     bodyBalance: profile.bodyBalance,
+//     shoulderWidth: profile.shoulderWidth,
+//     frameSize: profile.frameSize,
+//     createdAt: profile.createdAt,
+//     updatedAt: profile.updatedAt
+// });
 
 const userUpdateData = (payload) => {
     const keys = Object.keys(payload).filter((key) => key !== 'userId');
@@ -268,7 +268,25 @@ export class UserProfileService {
     async getBodyProfile(userId) {
         const profile = await this.client.bodyProfile.findUnique({ where: { userId } });
         if (!profile) throw problem(404, 'PROFILE404_01', '등록된 체형 프로필이 존재하지 않습니다.');
-        return publicBodyProfile(profile);
+        return {
+            bodyProfileId: profile.id,
+            measurements: {
+                shoulderWidth: profile.shoulderWidthCm,
+                chestCircumference: profile.chestCircumference,
+                waistCircumference: profile.waistCircumference,
+                hipCircumference: profile.hipCircumference,
+                upperBodyLength: profile.upperBodyLength,
+                lowerBodyLength: profile.lowerBodyLength,
+                legLength: profile.legLength
+            },
+            bodyTypeResult: {
+                bodyType: profile.bodyType,
+                ...getBodyTypeDetails(profile.bodyType),
+                bodyBalance: profile.bodyBalance,
+                shoulderWidth: profile.shoulderWidth,
+                frameSize: profile.frameSize
+            }
+        };
     }
 
     async saveBodyType(userId, payload) {
@@ -298,28 +316,19 @@ export class UserProfileService {
         // TODO: 향후 이 부분에 실제 S3 이미지 업로드 및 AI 서버 연동 로직이 들어갑니다.
         // 현재는 프론트엔드 UI 연동 테스트를 위해 명세서 규격과 똑같은 Mock 데이터를 반환합니다.
 
-        // Mock 결과 생성 및 DB 저장
         const mockResult = stubDetailedBodyAnalysis(userId);
 
-        const profileData = {
-            bodyType: mockResult.bodyTypeResult.bodyType,
-            bodyBalance: mockResult.bodyTypeResult.bodyBalance,
-            shoulderWidth: mockResult.bodyTypeResult.shoulderWidth,
-            frameSize: mockResult.bodyTypeResult.frameSize
-        };
-
-        await this.client.bodyProfile.upsert({
-            where: { userId },
-            create: { userId, ...profileData },
-            update: profileData
-        });
-
-        return mockResult;
+        return mockResult; 
     }
 
     async saveBodyProfile(userId, payload) {
         const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
         if (!user) throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
+
+        const existingProfile = await this.client.bodyProfile.findUnique({ where: { userId } });
+        if (existingProfile && existingProfile.bodyType && existingProfile.analysisId) {
+            throw problem(409, 'PROFILE409_01', '이미 체형 프로필이 등록되어 있습니다.');
+        }
 
         const { analysisId, measurements, bodyType } = payload;
 
