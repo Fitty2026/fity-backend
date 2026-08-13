@@ -55,6 +55,7 @@ describe('GeminiOutfitAiAdapter', () => {
         assert.equal(request.url, 'https://gemini.test/interactions');
         assert.equal(request.options.headers['x-goog-api-key'], 'test-key');
         assert.equal(request.body.model, 'gemini-test-image');
+        assert.equal(request.body.response_format.mime_type, 'image/jpeg');
         assert.equal(request.body.input.filter((part) => part.type === 'image').length, 2);
         assert.deepEqual(imageService.reads, [{ imageId: 14, ownerUserId: 1 }, { imageId: 16, ownerUserId: 1 }]);
         assert.equal(imageService.writes[0].ownerUserId, 1);

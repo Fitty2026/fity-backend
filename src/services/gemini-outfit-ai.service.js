@@ -147,7 +147,7 @@ export class GeminiOutfitAiAdapter {
                 body: JSON.stringify({
                     model: this.model,
                     input: inputs,
-                    response_format: { type: 'image', mime_type: 'image/png', aspect_ratio: '3:4', image_size: '1K' }
+                    response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: '3:4', image_size: '1K' }
                 })
             });
             if (!response.ok) throw adapterError('AI_UNAVAILABLE', `Gemini returned ${response.status}.`);

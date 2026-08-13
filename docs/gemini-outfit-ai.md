@@ -15,7 +15,7 @@ Gemini uses `gemini-3.1-flash-image` by default. The model can be changed with `
 - Up to three owned, active closet images are loaded from the private ImageAsset storage.
 - Selected items are prioritized, then the closet snapshot supplies missing categories.
 - Body profile attributes, style preferences, situation, date, and weather are included in the prompt.
-- The output must be PNG, JPEG, or WebP and no larger than 20 MB.
+- The API requests JPEG output. Returned PNG, JPEG, or WebP images are accepted when they are no larger than 20 MB.
 - A valid output is stored as an `OUTFIT_RESULT` ImageAsset with `GENERATED` origin.
 - Gemini rejection, timeout, malformed output, or storage failure is handled by the existing outfit fallback boundary.
 
