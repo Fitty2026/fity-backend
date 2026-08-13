@@ -19,13 +19,16 @@ import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
 import { UserProfileService } from './services/user-profile.service.js';
 import { ReceiptService } from './services/receipt.service.js';
+import { ImageUrlSigner } from './services/image-url-signer.js';
+
+const imageUrlSigner = new ImageUrlSigner();
 
 const createDefaultImageService = () => {
     const repository = new ImageRepository(getPrisma);
     const storage = new LocalImageStorage({
         rootDirectory: process.env.IMAGE_STORAGE_ROOT || path.resolve('var/images')
     });
-    return new ImageService({ repository, storage, storageProvider: 'local' });
+    return new ImageService({ repository, storage, urlSigner: imageUrlSigner, storageProvider: 'local' });
 };
 
 const createDefaultAuthService = () => new AuthService({
@@ -36,12 +39,12 @@ const defaultHealthCheck = async () => {
     await getPrisma().$queryRaw`SELECT 1`;
 };
 
-const createDefaultClosetService = () => new ClosetService({ getPrisma });
+const createDefaultClosetService = () => new ClosetService({ getPrisma, imageUrlSigner });
 const createDefaultUserProfileService = () => new UserProfileService({ getPrisma });
 const createDefaultOutfitService = () => new OutfitService({
     repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
 });
-const createDefaultReceiptService = () => new ReceiptService({ getPrisma });
+const createDefaultReceiptService = () => new ReceiptService({ getPrisma, imageUrlSigner });
 
 export const createCorsOptions = (configuredOrigins = process.env.CORS_ALLOWED_ORIGINS) => {
     const allowedOrigins = configuredOrigins

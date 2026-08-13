@@ -6,11 +6,17 @@ export const createImageRouter = ({ imageService, authenticate }) => {
     const imageRouter = express.Router();
     const controller = createImageController(imageService);
 
-    imageRouter.use(authenticate);
-    imageRouter.post('/upload', uploadSingleImage, controller.uploadImage);
-    imageRouter.get('/:imageId', controller.getImage);
-    imageRouter.get('/:imageId/content', controller.getImageContent);
-    imageRouter.delete('/:imageId', controller.deleteImage);
+    imageRouter.get('/:imageId/content', (req, res, next) => {
+        if (req.query.expires !== undefined || req.query.signature !== undefined) {
+            return controller.getSignedImageContent(req, res, next);
+        }
+        return authenticate(req, res, (error) => error
+            ? next(error)
+            : controller.getImageContent(req, res, next));
+    });
+    imageRouter.post('/upload', authenticate, uploadSingleImage, controller.uploadImage);
+    imageRouter.get('/:imageId', authenticate, controller.getImage);
+    imageRouter.delete('/:imageId', authenticate, controller.deleteImage);
 
     return imageRouter;
 };
