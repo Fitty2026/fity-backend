@@ -7,17 +7,10 @@ const USERNAME_PATTERN = /^[a-zA-Z0-9]+$/;
 const PASSWORD_PATTERN = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+~`|}{[\]:;?><,./-]).{8,72}$/;
 const SIGNUP_FIELDS = new Set(['name', 'loginId', 'email', 'password']);
 
-const createRequestError = (message, code = 'AUTH4001') => {
+const createRequestError = (message, code = 'AUTH400_01') => {
     const error = new Error(message);
     error.status = 400;
     error.code = code;
-    return error;
-};
-
-const createUnauthorizedError = () => {
-    const error = new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
-    error.status = 401;
-    error.code = 'AUTH4012';
     return error;
 };
 
@@ -83,7 +76,7 @@ const getJwtConfig = () => {
     if (!secret || secret.length < 32) {
         const error = new Error('JWT_ACCESS_SECRET 환경 변수가 설정되지 않았습니다.');
         error.status = 500;
-        error.code = 'AUTH5001';
+        error.code = 'AUTH500_01';
         throw error;
     }
     return { secret, expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '7d' };
@@ -134,7 +127,7 @@ export class AuthService {
     }
 
     async login(input) {
-        const { email, password } = validateCredentials(input);
+        const { email, password } = validateLoginInput(input);
         const user = await this.repository.findByEmail(email);
         if (!user) {
             const err = new Error('가입되지 않은 이메일 주소입니다.');
@@ -160,5 +153,49 @@ export class AuthService {
             expiresIn
         });
         return { accessToken, userId: user.id, name: user.name };
+    }
+
+    async socialLogin(input) {
+        const { provider, accessToken } = input;
+        
+        // 1. 유효한 플랫폼인지 검사
+        if (!['kakao', 'google', 'apple'].includes(provider)) {
+            throw createRequestError('지원하지 않는 소셜 로그인 제공자입니다.', 'AUTH400_02');
+        }
+
+        try {
+            // 2. 실제 토큰 검증 시도 (현재는 인프라 세팅 전이므로 무조건 에러 발생!)
+            // 향후 진짜 통신 코드가 여기에 들어갑니다.
+            throw new Error('실제 소셜 로그인 API가 아직 연결되지 않았습니다.');
+            
+        } catch (error) {
+            // 3. 진짜 통신 실패 시 비상용(가라) 로그인으로 우회
+            console.error(`🔥 [${provider} 소셜 로그인 실패] 비상용 계정으로 우회합니다. 사유:`, error.message);
+            return this.mockSocialLoginFallback(provider);
+        }
+    }
+
+    // 💡 [추가] 가라 로그인 우회 처리 함수
+    async mockSocialLoginFallback(provider) {
+        const fallbackEmail = `mock_${provider}@fitty.test.com`;
+        
+        // 가라 유저가 이미 있는지 조회
+        let user = await this.repository.findByEmail(fallbackEmail);
+
+        if (!user) {
+            // 없으면 DB 규칙에 맞게 임시 유저 생성 (username, email, passwordHash, name 필수)
+            const fallbackUsername = `mock_${provider}_${Date.now()}`;
+            const dummyPasswordHash = await bcrypt.hash('MockPassword123!', 12);
+
+            user = await this.repository.create({
+                username: fallbackUsername,
+                email: fallbackEmail,
+                passwordHash: dummyPasswordHash,
+                name: `${provider}가라유저`
+            });
+        }
+
+        // 기존 일반 로그인과 똑같이 JWT 토큰 발급해서 리턴
+        return this.createAuthResult(user);
     }
 }

@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { ReceiptService } from '../src/services/receipt.service.js';
+import { ImageUrlSigner } from '../src/services/image-url-signer.js';
+
+const imageUrlSigner = new ImageUrlSigner({ secret: 'test-image-url-secret-at-least-32-characters', now: () => 1_800_000_000_000 });
 
 test('ReceiptService는 DB를 사용하는 메서드가 호출되기 전까지 Prisma를 생성하지 않는다', async () => {
     let calls = 0;
@@ -29,22 +32,20 @@ test('연관 이미지 조회는 현재 계약의 세 필드와 활성 아이템
             }
         }
     };
-    const service = new ReceiptService({ prisma });
+    const service = new ReceiptService({ prisma, imageUrlSigner });
 
     const result = await service.findRelatedImages({
         brand: 'Fitty',
         productName: '셔츠',
-        colorText: '네이비'
+        colorHex: '#000080'
     });
 
-    assert.deepEqual(result, [
-        '/api/v1/images/31/content',
-        '/api/v1/images/32/content'
-    ]);
+    assert.match(result[0], /^\/api\/v1\/images\/31\/content\?expires=\d+&signature=[a-f0-9]{64}$/);
+    assert.match(result[1], /^\/api\/v1\/images\/32\/content\?expires=\d+&signature=[a-f0-9]{64}$/);
     assert.deepEqual(receivedQuery.where, {
         brand: 'Fitty',
         name: '셔츠',
-        colorText: '네이비',
+        colorHex: '#000080',
         imageId: { not: null },
         deletedAt: null
     });
@@ -77,7 +78,7 @@ test('일괄 저장은 트랜잭션에서 옷장 항목과 태그를 저장한�
             imageId: '21',
             productName: '오버핏 셔츠',
             brand: 'Fitty',
-            colorText: '화이트',
+            colorHex: '#FFFFFF',
             category: 'TOP',
             tags: ['캐주얼', '봄']
         }]

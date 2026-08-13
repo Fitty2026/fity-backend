@@ -1,6 +1,21 @@
 import axios from 'axios';
 import { randomUUID } from 'node:crypto';
 
+const COLOR_DICTIONARY = {
+    "블랙": "#000000", "BLACK": "#000000", "BLK": "#000000", "검정": "#000000",
+    "화이트": "#FFFFFF", "WHITE": "#FFFFFF", "WHT": "#FFFFFF", "흰색": "#FFFFFF",
+    "그레이": "#808080", "GRAY": "#808080", "회색": "#808080",
+    "네이비": "#000080", "NAVY": "#000080",
+    "레드": "#FF0000", "RED": "#FF0000", "빨강": "#FF0000",
+    "브라운": "#A52A2A", "BROWN": "#A52A2A", "갈색": "#A52A2A", "BRN": "#A52A2A",
+    "핑크": "#FFC0CB", "PINK": "#FFC0CB", "분홍": "#FFC0CB", "PNK": "#FFC0CB",
+    "베이지": "#F5F5DC", "BEIGE": "#F5F5DC", "BEG": "#F5F5DC",
+    "블루": "#0000FF", "BLUE": "#0000FF", "파랑": "#0000FF", "BLU": "#0000FF",
+    "그린": "#008000", "GREEN": "#008000", "초록": "#008000", "GRN": "#008000",
+    "옐로우": "#FFFF00", "YELLOW": "#FFFF00", "노랑": "#FFFF00", "YEL": "#FFFF00",
+    "멀티": "#MULTI", "MULTI": "#MULTI", "알록달록": "#MULTI"
+};
+
 const createReceiptError = (status, code, message, cause) => {
     const error = new Error(message, cause ? { cause } : undefined);
     error.status = status;
@@ -12,11 +27,12 @@ const VALID_PLATFORMS = ['MUSINSA', 'ZIGZAG', 'ABLY', 'OFFLINE'];
 const VALID_CATEGORIES = ['TOP', 'BOTTOM', 'OUTER', 'SHOES', 'ACCESSORY', 'ETC']; 
 
 export class ReceiptService {
-    constructor({ prisma, getPrisma } = {}) {
+    constructor({ prisma, getPrisma, imageUrlSigner } = {}) {
         if (!prisma && !getPrisma) {
             throw new TypeError('ReceiptService에는 prisma 또는 getPrisma가 필요합니다.');
         }
         this.getPrisma = getPrisma || (() => prisma);
+        this.imageUrlSigner = imageUrlSigner;
     }
 
     // [API 1] OCR 처리
@@ -41,8 +57,8 @@ export class ReceiptService {
                     brand: "무신사 스탠다드",
                     category: "TOP", 
                     subCategory: "반팔 티셔츠",
-                    size: "FREE",
                     colorText: "딥 인디고", 
+                    colorHex: null,
                     purchaseDate: new Date().toISOString().split('T')[0],
                     purchasePlace: platform || "MUSINSA",
                     importType: importType,
@@ -80,14 +96,26 @@ export class ReceiptService {
                 if (detectedTexts.length > 0) {
                     const parsedBrand = detectedTexts[0] || "Fitty 브랜드";
                     const parsedProductName = detectedTexts.slice(1, 4).join(' ') || detectedTexts[0] || "인식된 상품";
+                    const allText = detectedTexts.join(' ').toUpperCase();
+
+                    let parsedColorText = null;
+                    let matchedHex = null;
+
+                    for (const [key, hex] of Object.entries(COLOR_DICTIONARY)) {
+                        if (allText.includes(key.toUpperCase())) {
+                            parsedColorText = key;  // "블랙"
+                            matchedHex = hex;       // "#000000"
+                            break;
+                        }
+                    }
 
                     extractedData.push({
                         productName: parsedProductName,
                         brand: parsedBrand,            
                         category: "TOP",
                         subCategory: null,
-                        size: "FREE",
-                        colorText: null, 
+                        colorText: parsedColorText, 
+                        colorHex: matchedHex,
                         purchaseDate: new Date().toISOString().split('T')[0],
                         purchasePlace: platform || "OFFLINE",
                         importType,
@@ -110,18 +138,20 @@ export class ReceiptService {
     }
 
     // [API 2] 연관 이미지 조회
-    async findRelatedImages({ brand, productName, colorText }) {
-        if (!brand || !productName || !colorText) {
+    async findRelatedImages({ brand, productName, colorHex }) {
+        if (!brand || !productName || !colorHex) {
             throw createReceiptError(400, 'OCR400_10', '필수 검색 조건(브랜드, 제품명, 색상)이 누락되었습니다.');
         }
 
         try {
             const prisma = this.getPrisma();
+            const cleanedBrand = brand.trim();
+            const cleanedName = productName.trim();
             const items = await prisma.closetItem.findMany({
                 where: { 
-                    brand: brand, 
-                    name: productName,
-                    colorText: colorText, 
+                    brand: cleanedBrand,       
+                    name: cleanedName,      
+                    colorHex: colorHex,
                     imageId: { not: null },
                     deletedAt: null 
                 },
@@ -129,9 +159,9 @@ export class ReceiptService {
                 take: 3
             });
 
-            // 매핑된 사진이 없으면 빈 배열 [] 반환 (정상 응답)
-            return items.map(item => `/api/v1/images/${item.imageId}/content`);
+            return items.map(item => this.imageUrlSigner.createSignedUrl(item.imageId));
         } catch (cause) {
+            console.error("🔥 [findRelatedImages] 진짜 DB 에러 상세 내용:", cause);
             throw createReceiptError(500, 'OCR500_03', '연관 이미지를 조회하는 중 서버 오류가 발생했습니다.', cause);
         }
     }
@@ -146,7 +176,7 @@ export class ReceiptService {
         }
 
         for (const item of items) {
-            if (!item.brand || !item.productName || !item.colorText) {
+            if (!item.brand || !item.productName || !item.colorHex) {
                 throw createReceiptError(400, 'OCR400_07', '모든 상품의 브랜드, 제품명, 색상 정보는 필수입니다.');
             }
             if (!item.imageId) {
@@ -173,11 +203,10 @@ export class ReceiptService {
                             userId: userId,
                             imageId: (item.imageId && !isNaN(Number(item.imageId))) ? Number(item.imageId) : null,
                             name: item.productName,
-                            size: item.size || 'FREE',
                             category: item.category || '기타',
                             importType: item.importType || 'RECEIPT',
                             brand: item.brand,
-                            colorText: item.colorText,
+                            colorHex: item.colorHex,
                             subCategory: item.subCategory,
                             memo: item.memo
                         }

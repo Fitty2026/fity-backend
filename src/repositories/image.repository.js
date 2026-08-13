@@ -39,6 +39,16 @@ export class ImageRepository {
         });
     }
 
+    async findActive({ imageId }) {
+        return this.imageAsset.findFirst({
+            where: {
+                id: imageId,
+                status: ACTIVE_STATUS,
+                deletedAt: null
+            }
+        });
+    }
+
     async findOwned({ imageId, ownerUserId }) {
         return this.imageAsset.findFirst({
             where: {

@@ -33,12 +33,12 @@ export const createReceiptController = (receiptService) => ({
     // [API 2] 연관 의류 이미지 조회
     searchClothesImage: async (req, res, next) => {
         try {
-            const { brand, productName, colorText } = req.query;
-            if (!brand || !productName || !colorText) {
+            const { brand, productName, colorHex } = req.query;
+            if (!brand || !productName || !colorHex) {
                 throw createReceiptError(400, 'OCR400_10', '필수 검색 조건(브랜드, 제품명, 색상)이 누락되었습니다.');
             }
 
-            const images = await receiptService.findRelatedImages({ brand, productName, colorText });
+            const images = await receiptService.findRelatedImages({ brand, productName, colorHex });
 
             return sendResponse(res, { images }, '연관 의류 이미지 조회에 성공했습니다.');
         } catch (error) {
