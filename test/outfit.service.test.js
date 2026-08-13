@@ -73,6 +73,7 @@ describe('OutfitService', () => {
         const created = await service.createGenerationJob(1, { closetItemIds: [4], styleTagIds: [2] });
         const polled = await service.getGenerationJob(1, created.jobId);
         assert.equal(polled.status, 'queued');
+        assert.equal(polled.generatedImageUrl, null);
         assert.equal(polled.generatedImage, null);
     });
     it('rejects a generation request that includes another user\'s closet item', async () => {
@@ -191,6 +192,8 @@ describe('OutfitService', () => {
         await service.processGenerationJob(created.jobId);
         const result = await service.getGenerationJob(1, created.jobId);
         assert.equal(result.status, 'completed');
+        assert.equal(result.generatedImageUrl, '/fallback/default-outfit.png');
+        assert.equal(result.generatedImageUrl, result.generatedImage.imageUrl);
         assert.deepEqual(result.generatedImage, {
             outfitResultId: 2,
             imageUrl: '/fallback/default-outfit.png',
@@ -347,6 +350,8 @@ describe('OutfitService', () => {
         cleaned = await service.cleanupExpiredJobs();
         assert.equal(cleaned.expiredResults, 1);
         assert.equal(repository.jobs.find((job) => job.id === unsaved.jobId).status, 'EXPIRED');
+        const expired = await service.getGenerationJob(1, unsaved.jobId);
+        assert.equal(expired.generatedImageUrl, null);
 
         const kept = await service.createGenerationJob(1, { closetItemIds: [4] });
         await service.processGenerationJob(kept.jobId);

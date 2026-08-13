@@ -17,6 +17,7 @@ import { ImageService } from './services/image.service.js';
 import { OutfitService } from './services/outfit.service.js';
 import { OutfitAiAdapter } from './services/outfit-ai.service.js';
 import { PuzzleService } from './services/puzzle.service.js';
+import { GeminiOutfitAiAdapter } from './services/gemini-outfit-ai.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
 import { UserProfileService } from './services/user-profile.service.js';
@@ -43,8 +44,14 @@ const defaultHealthCheck = async () => {
 
 const createDefaultClosetService = () => new ClosetService({ getPrisma, imageUrlSigner });
 const createDefaultUserProfileService = () => new UserProfileService({ getPrisma });
-const createDefaultOutfitService = () => new OutfitService({
-    repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
+const createDefaultOutfitAiAdapter = (imageService) => {
+    if (process.env.AI_OUTFIT_ADAPTER_URL) return new OutfitAiAdapter();
+    if (process.env.GEMINI_API_KEY) return new GeminiOutfitAiAdapter({ imageService });
+    return new OutfitAiAdapter();
+};
+const createDefaultOutfitService = (imageService) => new OutfitService({
+    repository: new OutfitRepository(getPrisma),
+    aiAdapter: createDefaultOutfitAiAdapter(imageService)
 });
 const createDefaultPuzzleService = () => new PuzzleService({
     repository: new PuzzleRepository(getPrisma)
@@ -76,7 +83,7 @@ export const createApp = ({
     authService = createDefaultAuthService(),
     closetService = createDefaultClosetService(),
     userProfileService = createDefaultUserProfileService(),
-    outfitService = createDefaultOutfitService(),
+    outfitService = createDefaultOutfitService(imageService),
     puzzleService = createDefaultPuzzleService(),
     receiptService = createDefaultReceiptService(),
     authenticate = authenticateJwt,

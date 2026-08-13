@@ -165,6 +165,11 @@ const toJob = (job, { isExistingJob, includeInput = false, includeResult = true 
     ...(includeInput ? { input: jobInput(job) } : {}),
     expiresAt: job.expiresAt,
     ...(includeResult ? { outfitResultId: job.status === 'EXPIRED' ? null : job.result?.id ?? null } : {}),
+    ...(includeResult ? {
+        generatedImageUrl: job.result && job.status !== 'EXPIRED'
+            ? job.result.generatedImageUrl
+            : null
+    } : {}),
     ...(includeResult ? { generatedImage: job.result && job.status !== 'EXPIRED' ? {
         outfitResultId: job.result.id,
         imageUrl: job.result.generatedImageUrl,
