@@ -92,7 +92,7 @@ const validItem = {
     colorText: '화이트',
     subCategory: '옥스퍼드 셔츠',
     memo: '봄 코디용',
-    size: 'M',
+    colorHex: '#FFFFFF',
     category: 'TOP',
     importType: 'MANUAL',
     tags: ['여름', '흰색']
