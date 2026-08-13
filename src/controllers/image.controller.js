@@ -83,6 +83,23 @@ export const createImageController = (imageService) => ({
         }
     },
 
+    getSignedImageContent: async (req, res, next) => {
+        try {
+            const { asset, buffer } = await imageService.getSignedImageContent({
+                imageId: parseImageId(req.params.imageId),
+                expires: req.query.expires,
+                signature: req.query.signature
+            });
+            res.set('Content-Type', asset.mimeType);
+            res.set('Content-Length', String(buffer.length));
+            res.set('Cache-Control', 'private, max-age=300');
+            res.set('X-Content-Type-Options', 'nosniff');
+            return res.status(200).send(buffer);
+        } catch (error) {
+            return next(error);
+        }
+    },
+
     deleteImage: async (req, res, next) => {
         try {
             const result = await imageService.deleteImage({

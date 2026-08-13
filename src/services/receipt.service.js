@@ -22,11 +22,12 @@ const VALID_PLATFORMS = ['MUSINSA', 'ZIGZAG', 'ABLY', 'OFFLINE'];
 const VALID_CATEGORIES = ['TOP', 'BOTTOM', 'OUTER', 'SHOES', 'ACCESSORY', 'ETC']; 
 
 export class ReceiptService {
-    constructor({ prisma, getPrisma } = {}) {
+    constructor({ prisma, getPrisma, imageUrlSigner } = {}) {
         if (!prisma && !getPrisma) {
             throw new TypeError('ReceiptService에는 prisma 또는 getPrisma가 필요합니다.');
         }
         this.getPrisma = getPrisma || (() => prisma);
+        this.imageUrlSigner = imageUrlSigner;
     }
 
     // [API 1] OCR 처리
@@ -153,7 +154,8 @@ export class ReceiptService {
                 take: 3
             });
 
-            return items.map(item => `/api/v1/images/${item.imageId}/content`);
+            // 매핑된 사진이 없으면 빈 배열 [] 반환 (정상 응답)
+            return items.map(item => this.imageUrlSigner.createSignedUrl(item.imageId));
         } catch (cause) {
             console.error("🔥 [findRelatedImages] 진짜 DB 에러 상세 내용:", cause);
             throw createReceiptError(500, 'OCR500_03', '연관 이미지를 조회하는 중 서버 오류가 발생했습니다.', cause);

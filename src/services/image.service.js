@@ -99,10 +99,11 @@ export const hasValidImageSignature = async (file) => {
 };
 
 export class ImageService {
-    constructor({ repository, storage, storageProvider = 'local' }) {
+    constructor({ repository, storage, urlSigner, storageProvider = 'local' }) {
         this.repository = repository;
         this.storage = storage;
         this.storageProvider = storageProvider;
+        this.urlSigner = urlSigner;
     }
 
     async persistImage({ ownerUserId, file, imageType, origin }) {
@@ -197,6 +198,29 @@ export class ImageService {
         let asset;
         try {
             asset = await this.repository.findOwnedActive({ imageId, ownerUserId });
+        } catch (cause) {
+            throw createImageError(503, 'IMAGE5035', '이미지 메타데이터를 조회하지 못했습니다.', cause);
+        }
+        if (!asset) {
+            throw createImageError(404, 'IMAGE4041', '이미지를 찾을 수 없습니다.');
+        }
+
+        try {
+            const buffer = await this.storage.getBuffer(asset.storageKey);
+            return { asset, buffer };
+        } catch (cause) {
+            throw createImageError(503, 'IMAGE5033', '이미지 파일을 읽지 못했습니다.', cause);
+        }
+    }
+
+    async getSignedImageContent({ imageId, expires, signature }) {
+        if (!this.urlSigner?.verify({ imageId, expires, signature })) {
+            throw createImageError(403, 'IMAGE4031', '이미지 URL이 만료되었거나 유효하지 않습니다.');
+        }
+
+        let asset;
+        try {
+            asset = await this.repository.findActive({ imageId });
         } catch (cause) {
             throw createImageError(503, 'IMAGE5035', '이미지 메타데이터를 조회하지 못했습니다.', cause);
         }

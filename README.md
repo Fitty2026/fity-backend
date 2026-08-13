@@ -20,6 +20,8 @@ Fitty 2차 과제 MVP의 Node.js/Express 백엔드입니다. 현재 브랜치에
 - `DATABASE_URL`
 - 32자 이상의 `JWT_ACCESS_SECRET`
 - 선택: `JWT_ACCESS_EXPIRES_IN` (기본 `7d`)
+- 32자 이상의 `IMAGE_URL_SIGNING_SECRET` (미설정 시 `JWT_ACCESS_SECRET` 사용)
+- 선택: `IMAGE_URL_TTL_SECONDS` (기본 300초, 최대 3600초)
 - BE4 처리용 `INTERNAL_WORKER_TOKEN`
 - 외부 AI 연동 시 `AI_OUTFIT_ADAPTER_URL`
 - 선택: `AI_OUTFIT_ADAPTER_TIMEOUT_MS` (기본 10,000ms)

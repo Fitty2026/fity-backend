@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { ClosetService } from '../src/services/closet.service.js';
+import { ImageUrlSigner } from '../src/services/image-url-signer.js';
+
+const imageUrlSigner = new ImageUrlSigner({ secret: 'test-image-url-secret-at-least-32-characters', now: () => 1_800_000_000_000 });
 
 const clone = (value) => structuredClone(value);
 
@@ -79,7 +82,7 @@ const authenticateForTest = (req, res, next) => {
 
 const fixture = () => {
     const prisma = new MemoryPrisma();
-    const app = createApp({ closetService: new ClosetService({ prisma }), authenticate: authenticateForTest, healthCheck: async () => {} });
+    const app = createApp({ closetService: new ClosetService({ prisma, imageUrlSigner }), authenticate: authenticateForTest, healthCheck: async () => {} });
     return { prisma, api: request(app) };
 };
 const validItem = {
@@ -133,7 +136,7 @@ test('register validates owned active closet image, ignores body userId, and lis
     assert.equal(created.body.result.colorText, '화이트');
     assert.equal(created.body.result.subCategory, '옥스퍼드 셔츠');
     assert.equal(created.body.result.memo, '봄 코디용');
-    assert.equal(created.body.result.image_url, '/api/v1/images/10/content');
+    assert.match(created.body.result.image_url, /^\/api\/v1\/images\/10\/content\?expires=\d+&signature=[a-f0-9]{64}$/);
     const foreignList = await api.get('/api/v1/closets/items?userId=7').set('x-test-user-id', '8');
     assert.deepEqual(foreignList.body.result, { category_count: {}, closet_items: [] });
     for (const imageId of [11, 12, 13, 999]) {
@@ -168,7 +171,7 @@ test('create and tag update are transactional, and CRUD is owner scoped', async 
     assert.equal(changed.body.result.colorText, null);
     assert.equal(changed.body.result.subCategory, '긴팔 셔츠');
     assert.equal(changed.body.result.memo, '수정 메모');
-    assert.equal(changed.body.result.image_url, '/api/v1/images/10/content');
+    assert.match(changed.body.result.image_url, /^\/api\/v1\/images\/10\/content\?expires=\d+&signature=[a-f0-9]{64}$/);
     const foreignDelete = await api.delete(`/api/v1/closets/items/${itemId}`).set('x-test-user-id', '8');
     assert.equal(foreignDelete.status, 404);
     const deleted = await api.delete(`/api/v1/closets/items/${itemId}`).set('x-test-user-id', '7');
