@@ -37,7 +37,7 @@ test('연관 이미지 조회는 현재 계약의 세 필드와 활성 아이템
     const result = await service.findRelatedImages({
         brand: 'Fitty',
         productName: '셔츠',
-        colorText: '네이비'
+        colorHex: '#000080'
     });
 
     assert.match(result[0], /^\/api\/v1\/images\/31\/content\?expires=\d+&signature=[a-f0-9]{64}$/);
@@ -45,7 +45,7 @@ test('연관 이미지 조회는 현재 계약의 세 필드와 활성 아이템
     assert.deepEqual(receivedQuery.where, {
         brand: 'Fitty',
         name: '셔츠',
-        colorText: '네이비',
+        colorHex: '#000080',
         imageId: { not: null },
         deletedAt: null
     });
@@ -78,7 +78,7 @@ test('일괄 저장은 트랜잭션에서 옷장 항목과 태그를 저장한�
             imageId: '21',
             productName: '오버핏 셔츠',
             brand: 'Fitty',
-            colorText: '화이트',
+            colorHex: '#FFFFFF',
             category: 'TOP',
             tags: ['캐주얼', '봄']
         }]
