@@ -57,6 +57,7 @@ model User {
   outfitRevisions      OutfitRevision[]
   bodyProfile          BodyProfile?
   stylePreferences     UserStylePreference[]
+  bodyAnalysisSessions BodyAnalysisSession[]
 
   @@map("users")
 }
@@ -115,6 +116,19 @@ model OutfitGenerationJob {
   @@unique([userId, idempotencyKey])
   @@index([userId, status, createdAt])
   @@map("outfit_generation_jobs")
+}
+
+model BodyAnalysisSession {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  resultData  Json     @map("result_data")  // Gemini가 뱉어낸 분석 결과 JSON 전체
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("body_analysis_sessions")
 }
 
 model BodyProfile {
