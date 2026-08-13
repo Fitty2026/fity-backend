@@ -44,6 +44,7 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
             }
         });
         await prisma.bodyProfile.create({ data: { userId: owner.id } });
+        await prisma.puzzleWallet.create({ data: { userId: owner.id, balance: 176 } });
 
         const service = new OutfitService({
             repository: new OutfitRepository(prisma),
@@ -68,6 +69,8 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
         });
         assert.equal(created.status, 'queued');
         assert.equal(created.isExistingJob, false);
+        assert.equal((await prisma.puzzleWallet.findUnique({ where: { userId: owner.id } })).balance, 88);
+        assert.equal(await prisma.puzzleTransaction.count({ where: { userId: owner.id, reason: 'OUTFIT_GENERATION' } }), 1);
         const persistedJob = await prisma.outfitGenerationJob.findUnique({ where: { id: created.jobId } });
         assert.equal(persistedJob.inputSnapshot.schemaVersion, 'outfit-input-v1');
         assert.equal(persistedJob.inputSnapshot.bodyProfile.id > 0, true);
@@ -107,7 +110,9 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
             await prisma.outfitRevision.deleteMany({ where: { userId: ownerId } });
             await prisma.savedOutfit.deleteMany({ where: { userId: ownerId } });
             await prisma.outfitResult.deleteMany({ where: { userId: ownerId } });
+            await prisma.puzzleTransaction.deleteMany({ where: { userId: ownerId } });
             await prisma.outfitGenerationJob.deleteMany({ where: { userId: ownerId } });
+            await prisma.puzzleWallet.deleteMany({ where: { userId: ownerId } });
             await prisma.closetItem.deleteMany({ where: { userId: ownerId } });
             await prisma.bodyProfile.deleteMany({ where: { userId: ownerId } });
             await prisma.imageAsset.deleteMany({ where: { userId: ownerId } });

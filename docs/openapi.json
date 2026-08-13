@@ -119,6 +119,16 @@
         "parameters": [ { "$ref": "#/components/parameters/SavedOutfitId" } ],
         "responses": { "200": { "$ref": "#/components/responses/SavedOutfitResponse" }, "400": { "$ref": "#/components/responses/Error" }, "401": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
       }
+    },
+    "/puzzles/balance": {
+      "get": {
+        "operationId": "getPuzzleBalance",
+        "summary": "Get the authenticated user's puzzle balance",
+        "responses": {
+          "200": { "$ref": "#/components/responses/PuzzleBalanceResponse" },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
     }
   },
   "components": {
@@ -202,6 +212,7 @@
           "isExistingJob": { "type": "boolean" },
           "expiresAt": { "type": "string", "format": "date-time" },
           "outfitResultId": { "type": [ "integer", "null" ] },
+          "generatedImageUrl": { "type": [ "string", "null" ], "description": "Compatibility alias of generatedImage.imageUrl." },
           "generatedImage": { "type": [ "object", "null" ] },
           "failure": { "type": [ "object", "null" ] }
         }
@@ -224,6 +235,14 @@
           "isSaved": { "type": "boolean" }
         }
       },
+      "PuzzleBalance": {
+        "type": "object",
+        "required": [ "balance", "currency" ],
+        "properties": {
+          "balance": { "type": "integer", "minimum": 0 },
+          "currency": { "type": "string", "const": "PUZZLE" }
+        }
+      },
       "Envelope": {
         "type": "object",
         "required": [ "isSuccess", "code", "message", "result" ],
@@ -238,6 +257,7 @@
     "responses": {
       "JobResponse": { "description": "Common response containing a job or null", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
       "SavedOutfitResponse": { "description": "Common response containing saved outfit data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+      "PuzzleBalanceResponse": { "description": "Common response containing the puzzle balance", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
       "Error": { "description": "Common error response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }
     }
   }

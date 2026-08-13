@@ -5,6 +5,7 @@ const WEATHER_CONDITIONS = new Set(['SUNNY', 'CLOUDY', 'RAINY', 'SNOWY', 'WINDY'
 const JOB_TTL_MS = 10 * 60 * 1000;
 const RESULT_TTL_MS = 24 * 60 * 60 * 1000;
 const INPUT_SCHEMA_VERSION = 'outfit-input-v1';
+const DEFAULT_OUTFIT_GENERATION_PUZZLE_COST = 88;
 const isResultExpired = (result, now) => result.generationJob.status !== 'COMPLETED'
     || !result.generationJob.completedAt
     || now.getTime() - new Date(result.generationJob.completedAt).getTime() >= RESULT_TTL_MS;
@@ -164,6 +165,11 @@ const toJob = (job, { isExistingJob, includeInput = false, includeResult = true 
     ...(includeInput ? { input: jobInput(job) } : {}),
     expiresAt: job.expiresAt,
     ...(includeResult ? { outfitResultId: job.status === 'EXPIRED' ? null : job.result?.id ?? null } : {}),
+    ...(includeResult ? {
+        generatedImageUrl: job.result && job.status !== 'EXPIRED'
+            ? job.result.generatedImageUrl
+            : null
+    } : {}),
     ...(includeResult ? { generatedImage: job.result && job.status !== 'EXPIRED' ? {
         outfitResultId: job.result.id,
         imageUrl: job.result.generatedImageUrl,
@@ -218,10 +224,20 @@ const pagination = ({ page = 1, size = 10 }) => {
 };
 
 export class OutfitService {
-    constructor({ repository, aiAdapter, fallbackImageUrl = process.env.FALLBACK_OUTFIT_IMAGE_URL, now = () => new Date() }) {
+    constructor({
+        repository,
+        aiAdapter,
+        fallbackImageUrl = process.env.FALLBACK_OUTFIT_IMAGE_URL,
+        puzzleCost = Number(process.env.OUTFIT_GENERATION_PUZZLE_COST ?? DEFAULT_OUTFIT_GENERATION_PUZZLE_COST),
+        now = () => new Date()
+    }) {
+        if (!Number.isSafeInteger(puzzleCost) || puzzleCost <= 0) {
+            throw new TypeError('puzzleCost must be a positive safe integer.');
+        }
         this.repository = repository;
         this.aiAdapter = aiAdapter;
         this.fallbackImageUrl = normalizeFallbackImageUrl(fallbackImageUrl);
+        this.puzzleCost = puzzleCost;
         this.now = now;
     }
 
@@ -274,7 +290,7 @@ export class OutfitService {
         let created;
         for (let attempt = 0; attempt < 3; attempt += 1) {
             try {
-                created = await this.repository.createOrFindActiveJob(jobData, now);
+                created = await this.repository.createOrFindActiveJob(jobData, now, { amount: this.puzzleCost });
                 break;
             } catch (error) {
                 if (error.code === 'P2002' && idempotencyKey) {

@@ -58,8 +58,43 @@ model User {
   bodyProfile          BodyProfile?
   stylePreferences     UserStylePreference[]
   bodyAnalysisSessions BodyAnalysisSession[]
+  puzzleWallet         PuzzleWallet?
+  puzzleTransactions   PuzzleTransaction[]
 
   @@map("users")
+}
+
+enum PuzzleTransactionType {
+  CREDIT
+  DEBIT
+}
+
+model PuzzleWallet {
+  userId    Int      @id @map("user_id")
+  balance   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("puzzle_wallets")
+}
+
+model PuzzleTransaction {
+  id             Int                   @id @default(autoincrement())
+  userId         Int                   @map("user_id")
+  type           PuzzleTransactionType
+  amount         Int
+  balanceAfter   Int                   @map("balance_after")
+  reason         String                @db.VarChar(80)
+  idempotencyKey String                @map("idempotency_key") @db.VarChar(128)
+  referenceType  String?               @map("reference_type") @db.VarChar(40)
+  referenceId    String?               @map("reference_id") @db.VarChar(80)
+  createdAt      DateTime              @default(now()) @map("created_at")
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@map("puzzle_transactions")
 }
 
 model StyleTag {

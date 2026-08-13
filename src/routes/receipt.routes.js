@@ -6,10 +6,9 @@ export const createReceiptRouter = ({ receiptService, authenticate }) => {
     const router = express.Router();
     const controller = createReceiptController(receiptService);
 
-    router.use(authenticate);
-    router.post('/body-profiles/receipt-ocr', uploadReceiptImages, controller.analyzeReceiptOcr);
-    router.get('/body-profiles/clothes/search-image', controller.searchClothesImage);
-    router.post('/body-profiles/receipt-items', controller.registerBatchClothes);
+    router.post('/body-profiles/receipt-ocr', authenticate, uploadReceiptImages, controller.analyzeReceiptOcr);
+    router.get('/body-profiles/clothes/search-image', authenticate, controller.searchClothesImage);
+    router.post('/body-profiles/receipt-items', authenticate, controller.registerBatchClothes);
 
     return router;
 };

@@ -9,6 +9,7 @@
 - 성공 및 실패 응답은 `{ isSuccess, code, message, result }` 공통 형식을 사용합니다.
 - 다른 사용자의 리소스는 소유권 노출 방지를 위해 `NOT_FOUND404`로 응답할 수 있습니다.
 - 생성 및 재생성 POST는 `Idempotency-Key` 헤더를 지원합니다. 네트워크 재시도에는 같은 키와 같은 body를 사용하며, 같은 키를 다른 body에 재사용하면 `CONFLICT409`를 반환합니다. 키 공간은 두 엔드포인트가 공유하므로 생성과 재생성 요청에도 서로 다른 키를 사용합니다.
+- `AI_OUTFIT_ADAPTER_URL`이 없고 `GEMINI_API_KEY`가 설정되면 worker는 Gemini 이미지 생성을 사용합니다. 현재 계약에는 사용자 전신 참조 이미지가 없으므로 결과는 익명 가상 모델 기반 코디 시각화이며, Gemini 실패 시 기존 fallback 이미지로 완료됩니다.
 
 ## OUTFIT-01 코디 생성 요청
 
@@ -94,7 +95,7 @@
 }
 ```
 
-완료 시 `generatedImage`에 `outfitResultId`, `imageUrl`, `provider`, `modelVersion`, `promptVersion`, `fallbackUsed`, `outfitItems`, `recommendedClosetItemIds`가 포함됩니다. `outfitItems`는 `{ slot, itemId }` 배열이며 fallback 또는 기존 결과에서는 `null`일 수 있습니다. 진행 중 작업이 생성 후 10분을 초과하면 `expired/JOB_TIMEOUT`, 미저장 완료 결과가 24시간을 초과하면 `expired/RESULT_EXPIRED`로 전환됩니다.
+완료 시 최상위 `generatedImageUrl`과 `generatedImage.imageUrl`에 동일한 결과 URL을 반환합니다. `generatedImage`에는 `outfitResultId`, `imageUrl`, `provider`, `modelVersion`, `promptVersion`, `fallbackUsed`, `outfitItems`, `recommendedClosetItemIds`가 포함됩니다. 완료 전이나 만료 후 `generatedImageUrl`은 `null`입니다. `outfitItems`는 `{ slot, itemId }` 배열이며 fallback 또는 기존 결과에서는 `null`일 수 있습니다. 진행 중 작업이 생성 후 10분을 초과하면 `expired/JOB_TIMEOUT`, 미저장 완료 결과가 24시간을 초과하면 `expired/RESULT_EXPIRED`로 전환됩니다.
 
 두 만료 모두 HTTP 오류가 아니라 `COMMON200` 정상 조회 응답으로 반환합니다. FE는 `status: expired`에서 `failure.code`를 확인해 진행 시간 초과와 결과 보관 만료를 구분합니다.
 

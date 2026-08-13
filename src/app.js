@@ -10,11 +10,14 @@ import { sendResponse, errorHandler } from './middlewares/response.middleware.js
 import { AuthRepository } from './repositories/auth.repository.js';
 import { ImageRepository } from './repositories/image.repository.js';
 import { OutfitRepository } from './repositories/outfit.repository.js';
+import { PuzzleRepository } from './repositories/puzzle.repository.js';
 import { createIndexRouter } from './routes/index.js';
 import { AuthService } from './services/auth.service.js';
 import { ImageService } from './services/image.service.js';
 import { OutfitService } from './services/outfit.service.js';
 import { OutfitAiAdapter } from './services/outfit-ai.service.js';
+import { PuzzleService } from './services/puzzle.service.js';
+import { GeminiOutfitAiAdapter } from './services/gemini-outfit-ai.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
 import { UserProfileService } from './services/user-profile.service.js';
@@ -41,8 +44,17 @@ const defaultHealthCheck = async () => {
 
 const createDefaultClosetService = () => new ClosetService({ getPrisma, imageUrlSigner });
 const createDefaultUserProfileService = () => new UserProfileService({ getPrisma });
-const createDefaultOutfitService = () => new OutfitService({
-    repository: new OutfitRepository(getPrisma), aiAdapter: new OutfitAiAdapter()
+const createDefaultOutfitAiAdapter = (imageService) => {
+    if (process.env.AI_OUTFIT_ADAPTER_URL) return new OutfitAiAdapter();
+    if (process.env.GEMINI_API_KEY) return new GeminiOutfitAiAdapter({ imageService });
+    return new OutfitAiAdapter();
+};
+const createDefaultOutfitService = (imageService) => new OutfitService({
+    repository: new OutfitRepository(getPrisma),
+    aiAdapter: createDefaultOutfitAiAdapter(imageService)
+});
+const createDefaultPuzzleService = () => new PuzzleService({
+    repository: new PuzzleRepository(getPrisma)
 });
 const createDefaultReceiptService = () => new ReceiptService({ getPrisma, imageUrlSigner });
 
@@ -71,7 +83,8 @@ export const createApp = ({
     authService = createDefaultAuthService(),
     closetService = createDefaultClosetService(),
     userProfileService = createDefaultUserProfileService(),
-    outfitService = createDefaultOutfitService(),
+    outfitService = createDefaultOutfitService(imageService),
+    puzzleService = createDefaultPuzzleService(),
     receiptService = createDefaultReceiptService(),
     authenticate = authenticateJwt,
     healthCheck = defaultHealthCheck,
@@ -83,6 +96,7 @@ export const createApp = ({
     app.locals.closetService = closetService;
     app.locals.userProfileService = userProfileService;
     app.locals.outfitService = outfitService;
+    app.locals.puzzleService = puzzleService;
     app.locals.receiptService = receiptService;
 
     app.use(cors(createCorsOptions()));
@@ -93,7 +107,17 @@ export const createApp = ({
         index: false,
         maxAge: '1h'
     }));
-    app.use('/api', createIndexRouter({ imageService, authService, closetService, userProfileService, outfitService, receiptService, authenticate, internalToken }));
+    app.use('/api', createIndexRouter({
+        imageService,
+        authService,
+        closetService,
+        userProfileService,
+        outfitService,
+        puzzleService,
+        receiptService,
+        authenticate,
+        internalToken
+    }));
 
     app.get('/health', async (req, res, next) => {
         try {
@@ -118,6 +142,13 @@ export const createApp = ({
             error.code = 'COMMON503';
             return next(error);
         }
+    });
+
+    app.use((req, res, next) => {
+        const error = new Error('요청한 API를 찾을 수 없습니다.');
+        error.status = 404;
+        error.code = 'NOT_FOUND404';
+        return next(error);
     });
 
     app.use(errorHandler);
