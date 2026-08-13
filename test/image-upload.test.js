@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { createApp } from '../src/app.js';
 import { requireAuthContext } from '../src/middlewares/auth-context.middleware.js';
 import { ImageService } from '../src/services/image.service.js';
+import { ImageUrlSigner } from '../src/services/image-url-signer.js';
 import { MemoryImageRepository } from './helpers/memory-image.repository.js';
 import { MemoryImageStorage } from './helpers/memory-image.storage.js';
 
@@ -12,6 +13,7 @@ let app;
 let repository;
 let storage;
 let imageService;
+let imageUrlSigner;
 
 let PNG_IMAGE;
 const TRUNCATED_PNG = Buffer.from([
@@ -54,9 +56,13 @@ before(async () => {
 beforeEach(() => {
     repository = new MemoryImageRepository();
     storage = new MemoryImageStorage();
+    imageUrlSigner = new ImageUrlSigner({
+        secret: 'test-image-url-secret-at-least-32-characters'
+    });
     imageService = new ImageService({
         repository,
         storage,
+        urlSigner: imageUrlSigner,
         storageProvider: 'memory'
     });
     app = createApp({
@@ -217,6 +223,36 @@ describe('BE2 image asset API', () => {
         const otherUser = await authenticated(request(app).get(`/api/v1/images/${imageId}`), 8);
         assert.equal(otherUser.status, 404);
         assert.equal(otherUser.body.code, 'IMAGE4041');
+    });
+
+    it('serves a valid short-lived signed URL without Authorization', async () => {
+        const uploaded = await uploadPng(7, 'CLOSET_ITEM');
+        const imageId = uploaded.body.result.imageId;
+        const signedUrl = imageUrlSigner.createSignedUrl(imageId);
+
+        const content = await request(app).get(signedUrl);
+        assert.equal(content.status, 200);
+        assert.equal(content.headers['x-content-type-options'], 'nosniff');
+        assert.deepEqual(content.body, PNG_IMAGE);
+
+        const tampered = await request(app).get(signedUrl.replace(`/${imageId}/`, `/${imageId + 1}/`));
+        assert.equal(tampered.status, 403);
+        assert.equal(tampered.body.code, 'IMAGE4031');
+    });
+
+    it('rejects an expired signed URL', async () => {
+        const uploaded = await uploadPng(7, 'CLOSET_ITEM');
+        const imageId = uploaded.body.result.imageId;
+        const expiredSigner = new ImageUrlSigner({
+            secret: 'test-image-url-secret-at-least-32-characters',
+            ttlSeconds: 1,
+            now: () => 1_000
+        });
+        const expiredUrl = expiredSigner.createSignedUrl(imageId);
+
+        const response = await request(app).get(expiredUrl);
+        assert.equal(response.status, 403);
+        assert.equal(response.body.code, 'IMAGE4031');
     });
 
     it('deletes the file and blocks subsequent access', async () => {

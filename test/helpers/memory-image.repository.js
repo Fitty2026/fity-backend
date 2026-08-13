@@ -39,6 +39,14 @@ export class MemoryImageRepository {
         return clone(record);
     }
 
+    async findActive({ imageId }) {
+        const record = this.records.get(imageId);
+        if (!record || record.status !== 'ACTIVE' || record.deletedAt !== null) {
+            return null;
+        }
+        return clone(record);
+    }
+
     async findOwned({ imageId, ownerUserId }) {
         const record = this.records.get(imageId);
         return record?.userId === ownerUserId ? clone(record) : null;

@@ -25,7 +25,7 @@ const normalizeTags = (tags) => {
     return normalized;
 };
 
-const toItemResponse = (item) => ({
+const toItemResponse = (item, imageUrlSigner) => ({
     item_id: item.id,
     imageId: item.imageId,
     name: item.name,
@@ -36,20 +36,17 @@ const toItemResponse = (item) => ({
     size: item.size,
     category: item.category,
     import_type: item.importType,
-    brand: item.brand,
-    colorText: item.colorText,
-    subCategory: item.subCategory,
-    memo: item.memo,
     tags: (item.tags || []).map((tag) => tag.tagName),
-    image_url: item.imageId ? `/api/v1/images/${item.imageId}/content` : null,
+    image_url: item.imageId ? imageUrlSigner.createSignedUrl(item.imageId) : null,
     created_at: item.createdAt,
     updated_at: item.updatedAt
 });
 
 export class ClosetService {
-    constructor({ prisma, getPrisma }) {
+    constructor({ prisma, getPrisma, imageUrlSigner }) {
         this.prisma = prisma;
         this.getPrisma = getPrisma;
+        this.imageUrlSigner = imageUrlSigner;
     }
 
     get client() { return this.prisma || this.getPrisma(); }
@@ -98,7 +95,7 @@ export class ClosetService {
                 data: { ...data, tags: { create: tags.map((tagName) => ({ tagName })) } },
                 include: { tags: true }
             });
-            return toItemResponse(item);
+            return toItemResponse(item, this.imageUrlSigner);
         });
     }
 
@@ -118,7 +115,9 @@ export class ClosetService {
             include: { tags: true }, 
             orderBy: { createdAt: 'desc' }
         });
-        const closet_items = items.filter(item => !item.deletedAt).map(toItemResponse);
+        const closet_items = items
+            .filter(item => !item.deletedAt)
+            .map((item) => toItemResponse(item, this.imageUrlSigner));
         return {
             category_count,
             closet_items
@@ -130,7 +129,7 @@ export class ClosetService {
             where: { id: itemId, userId }, include: { tags: true }
         });
         if (!item || item.deletedAt) throw problem(404, 'CLOSET4041', '존재하지 않는 옷장 아이템입니다.');
-        return toItemResponse(item);
+        return toItemResponse(item, this.imageUrlSigner);
     }
 
     async updateItem(userId, itemId, payload) {
@@ -161,7 +160,7 @@ export class ClosetService {
             });
             if (!existing || existing.deletedAt) throw problem(404, 'CLOSET4041', '존재하지 않는 옷장 아이템입니다.');
             const item = await tx.closetItem.update({ where: { id: itemId }, data, include: { tags: true } });
-            return toItemResponse(item);
+            return toItemResponse(item, this.imageUrlSigner);
         });
     }
 
@@ -191,7 +190,7 @@ export class ClosetService {
                 data: { deletedAt: null }, 
                 include: { tags: true } 
             });
-            return toItemResponse(item);
+            return toItemResponse(item, this.imageUrlSigner);
         });
     }
     //영구삭제
