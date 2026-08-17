@@ -244,9 +244,9 @@ test('body profile type ignores a body userId', async () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.result, null); 
     
-    const savedProfile = prisma.state.bodyProfiles.get(7);
-    assert.ok(savedProfile); 
-    assert.equal(savedProfile.bodyType, 'STRAIGHT'); 
+    const updatedUser = prisma.state.users.get(7);
+    assert.ok(updatedUser); 
+    assert.equal(updatedUser.userSelectedBodyType, 'STRAIGHT');
 });
 
 test('body profile type rejects missing or invalid enum values', async () => {
