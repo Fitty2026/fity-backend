@@ -55,6 +55,7 @@ model User {
   outfitResults        OutfitResult[]
   savedOutfits         SavedOutfit[]
   outfitRevisions      OutfitRevision[]
+  userSelectedBodyType   String?   @map("selected_body_type") @db.VarChar(60)
   bodyProfile          BodyProfile?
   stylePreferences     UserStylePreference[]
   bodyAnalysisSessions BodyAnalysisSession[]
@@ -181,6 +182,8 @@ model BodyProfile {
   upperBodyLength      Float?                @map("upper_body_length")
   lowerBodyLength      Float?                @map("lower_body_length")
   legLength            Float?                @map("leg_length")
+  upperBodyRatio       Int?                  @map("upper_body_ratio")
+  lowerBodyRatio       Int?                  @map("lower_body_ratio")
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Restrict)

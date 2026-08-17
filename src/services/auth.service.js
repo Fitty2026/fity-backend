@@ -158,34 +158,65 @@ export class AuthService {
     async socialLogin(input) {
         const { provider, accessToken } = input;
         
-        // 1. 유효한 플랫폼인지 검사
-        if (!['kakao', 'google', 'apple'].includes(provider)) {
+        if (provider === 'apple') {
+            throw createRequestError('현재 애플 로그인은 준비 중입니다.', 'AUTH400_03');
+        }
+
+        if (!['kakao', 'google'].includes(provider)) {
             throw createRequestError('지원하지 않는 소셜 로그인 제공자입니다.', 'AUTH400_02');
         }
 
         try {
-            // 2. 실제 토큰 검증 시도 (현재는 인프라 세팅 전이므로 무조건 에러 발생!)
-            // 향후 진짜 통신 코드가 여기에 들어갑니다.
-            throw new Error('실제 소셜 로그인 API가 아직 연결되지 않았습니다.');
+            let email, name;
+
+            if (provider === 'kakao') {
+                const response = await fetch('https://kapi.kakao.com/v2/user/me', {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+                if (!response.ok) throw new Error('카카오 액세스 토큰 검증 실패');
+                const data = await response.json();
+                email = data.kakao_account?.email;
+                name = data.kakao_account?.profile?.nickname;
+            } else if (provider === 'google') {
+                const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+                if (!response.ok) throw new Error('구글 액세스 토큰 검증 실패');
+                const data = await response.json();
+                email = data.email;
+                name = data.name;
+            }
+
+            if (!email) throw new Error('소셜 계정에서 이메일 정보를 가져올 수 없습니다.');
+
+            let user = await this.repository.findByEmail(email);
+
+            if (!user) {
+                const dummyPasswordHash = await bcrypt.hash(Date.now().toString(), SALT_ROUNDS);
+                user = await this.repository.create({
+                    username: `${provider}_${Date.now()}`,
+                    email: email,
+                    passwordHash: dummyPasswordHash,
+                    name: name || `${provider}유저`
+                });
+            }
+
+            return this.createAuthResult(user);
             
         } catch (error) {
-            // 3. 진짜 통신 실패 시 비상용(가라) 로그인으로 우회
             console.error(`🔥 [${provider} 소셜 로그인 실패] 비상용 계정으로 우회합니다. 사유:`, error.message);
             return this.mockSocialLoginFallback(provider);
         }
     }
 
-    // 💡 [추가] 가라 로그인 우회 처리 함수
     async mockSocialLoginFallback(provider) {
         const fallbackEmail = `mock_${provider}@fitty.test.com`;
         
-        // 가라 유저가 이미 있는지 조회
         let user = await this.repository.findByEmail(fallbackEmail);
 
         if (!user) {
-            // 없으면 DB 규칙에 맞게 임시 유저 생성 (username, email, passwordHash, name 필수)
             const fallbackUsername = `mock_${provider}_${Date.now()}`;
-            const dummyPasswordHash = await bcrypt.hash('MockPassword123!', 12);
+            const dummyPasswordHash = await bcrypt.hash('MockPassword123!', SALT_ROUNDS);
 
             user = await this.repository.create({
                 username: fallbackUsername,
@@ -195,7 +226,6 @@ export class AuthService {
             });
         }
 
-        // 기존 일반 로그인과 똑같이 JWT 토큰 발급해서 리턴
         return this.createAuthResult(user);
     }
 }

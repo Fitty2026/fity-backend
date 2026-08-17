@@ -71,30 +71,60 @@ const onboardingStyleIds = (payload) => {
 const getBodyTypeDetails = (bodyType) => {
     switch (bodyType) {
         case 'SLIM_STRAIGHT':
-        case 'STRAIGHT':
             return {
                 bodyTypeName: '슬림 스트레이트',
-                description: '전체적으로 균형이 좋고 슬림한 체형이에요',
-                celebrities: ['강민경', '크리스탈', '차정원'],
-                upperBodyRatio: 47,
-                lowerBodyRatio: 53
+                description: '전체적으로 균형이 좋고 슬림한 체형이에요.',
+                celebrities: ['크리스탈', '차정원', '박서준']
             };
-        case 'WAVE':
+        case 'STANDARD_STRAIGHT':
             return {
-                bodyTypeName: '웨이브 체형',
-                description: '목이 가늘고 길며 상체보다 하체에 볼륨이 실리는 체형이에요',
-                celebrities: ['윤아', '수지', '웬디'],
-                upperBodyRatio: 45,
-                lowerBodyRatio: 55
+                bodyTypeName: '스탠다드 스트레이트',
+                description: '상하체 밸런스가 이상적이고 탄탄한 입체감이 있는 체형이에요.',
+                celebrities: ['김혜수', '이하늬', '공유']
             };
-        case 'NATURAL':
-        default:
+        case 'SOFT_STRAIGHT':
             return {
-                bodyTypeName: '내추럴 체형',
-                description: '뼈와 관절 프레임이 굵직하며 골격감이 돋보이는 체형이에요',
-                celebrities: ['한혜진', '김고은', '정려원'],
-                upperBodyRatio: 50,
-                lowerBodyRatio: 50
+                bodyTypeName: '소프트 스트레이트',
+                description: '탄탄한 뼈대에 부드러운 곡선미가 돋보이는 체형이에요.',
+                celebrities: ['지수', '신세경', '안효섭']
+            };
+
+        case 'SLIM_WAVE':
+            return {
+                bodyTypeName: '슬림 웨이브',
+                description: '뼈대가 얇고 가녀리며 골반 라인이 부드러운 체형이에요.',
+                celebrities: ['장원영', '아이유', '박보검']
+            };
+        case 'CURVY_WAVE':
+            return {
+                bodyTypeName: '커비 웨이브',
+                description: '잘록한 허리와 하체의 볼륨감이 두드러지는 체형이에요.',
+                celebrities: ['화사', '권은비', '이준호']
+            };
+        case 'SOFT_WAVE':
+            return {
+                bodyTypeName: '소프트 웨이브',
+                description: '살성이 부드럽고 여리여리하며 하체에 무게감이 있는 체형이에요.',
+                celebrities: ['윤아', '수지', '임시완']
+            };
+
+        case 'SLIM_NATURAL':
+            return {
+                bodyTypeName: '슬림 내추럴',
+                description: '뚜렷한 골격과 여리여리한 느낌이 조화로운 체형이에요.',
+                celebrities: ['정려원', '한소희', '변우석']
+            };
+        case 'FRAME_NATURAL':
+            return {
+                bodyTypeName: '프레임 내추럴',
+                description: '어깨와 직각 프레임이 돋보이고 오버핏이 잘 어울리는 체형이에요.',
+                celebrities: ['한혜진', '이성경', '남주혁']
+            };
+        case 'ATHLETIC_NATURAL':
+            return {
+                bodyTypeName: '애슬레틱 내추럴',
+                description: '뼈대와 탄탄한 근육이 어우러져 건강미가 넘치는 체형이에요.',
+                celebrities: ['이시영', '유이', '손석구']
             };
     }
 };
@@ -269,10 +299,16 @@ export class UserProfileService {
     }
 
     async getBodyProfile(userId) {
+        const user = await this.client.user.findUnique({ 
+            where: { id: userId }, 
+            select: { userSelectedBodyType: true } 
+        });
         const profile = await this.client.bodyProfile.findUnique({ where: { userId } });
         if (!profile) throw problem(404, 'PROFILE404_01', '등록된 체형 프로필이 존재하지 않습니다.');
+        const details = getBodyTypeDetails(profile.bodyType);
         return {
             bodyProfileId: profile.id,
+            userSelectedBodyType: user?.userSelectedBodyType || "미설정",
             measurements: {
                 shoulderWidth: profile.shoulderWidthCm,
                 chestCircumference: profile.chestCircumference,
@@ -284,11 +320,16 @@ export class UserProfileService {
             },
             bodyTypeResult: {
                 bodyType: profile.bodyType,
-                ...getBodyTypeDetails(profile.bodyType),
+                bodyTypeName: details.bodyTypeName,
+                description: details.description,
+                celebrities: details.celebrities,
+                upperBodyRatio: profile.upperBodyRatio,
+                lowerBodyRatio: profile.lowerBodyRatio,
                 bodyBalance: profile.bodyBalance,
                 shoulderWidth: profile.shoulderWidth,
                 frameSize: profile.frameSize
-            }
+            },
+            updatedAt: profile.updatedAt
         };
     }
 
@@ -296,16 +337,15 @@ export class UserProfileService {
         const bodyType = bodyTypeOnlyData(payload);
         const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
         if (!user) throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
-        await this.client.bodyProfile.upsert({
-        where: { userId },
-        create: { userId, bodyType },
-        update: { bodyType }
+        await this.client.user.update({
+        where: { id: userId },
+        data: { userSelectedBodyType: bodyType } 
     });
     return null;
 }
 
     async analyzeBodyProfile(userId, files) {
-        const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
+        const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true, userSelectedBodyType: true } });
         if (!user) throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
 
         const imageFiles = files; 
@@ -323,22 +363,35 @@ export class UserProfileService {
                     buffer: file.buffer, 
                     mimeType: file.mimetype 
                 })),
-                ratios: calculatedRatios
+                ratios: calculatedRatios,
+                userSelectedBodyType: user.userSelectedBodyType
             });
 
             const session = await this.client.bodyAnalysisSession.create({
                 data: {
                     userId: userId,
-                    resultData: aiAnalysis, // Gemini가 반환한 전체 JSON 결과
+                    resultData: aiAnalysis, 
                     expiresAt: new Date(Date.now() + 30 * 60 * 1000) // 30분 뒤 만료
                 }
             });
             const analysisId = session.id;
 
+            const details = getBodyTypeDetails(aiAnalysis.bodyTypeResult.bodyType);
+
             return {
                 analysisId: analysisId,
                 measurements: aiAnalysis.measurements, 
-                bodyTypeResult: aiAnalysis.bodyTypeResult
+                bodyTypeResult: {
+                    bodyType: aiAnalysis.bodyTypeResult.bodyType,
+                    bodyTypeName: details.bodyTypeName,
+                    description: details.description,
+                    celebrities: details.celebrities,
+                    upperBodyRatio: aiAnalysis.bodyTypeResult.upperBodyRatio,
+                    lowerBodyRatio: aiAnalysis.bodyTypeResult.lowerBodyRatio,
+                    bodyBalance: aiAnalysis.bodyTypeResult.bodyBalance,
+                    shoulderWidth: aiAnalysis.bodyTypeResult.shoulderWidth,
+                    frameSize: aiAnalysis.bodyTypeResult.frameSize
+                }
             };
 
         } catch (error) {
@@ -351,16 +404,11 @@ export class UserProfileService {
         const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
         if (!user) throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
 
-        const existingProfile = await this.client.bodyProfile.findUnique({ where: { userId } });
-        if (existingProfile && existingProfile.bodyType && existingProfile.analysisId) {
-            throw problem(409, 'PROFILE409_01', '이미 체형 프로필이 등록되어 있습니다.');
-        }
-
-        const { analysisId, measurements, bodyType } = payload;
-
+        const { analysisId, measurements, bodyTypeResult } = payload;
         if (!analysisId) {
             throw problem(404, 'PROFILE404_01', '유효하지 않거나 만료된 체형 분석 결과입니다. 다시 분석을 진행해 주세요.');
         }
+        const bodyType = bodyTypeResult?.bodyType;
         if (!bodyType) {
             throw problem(400, 'PROFILE400_04', 'bodyType은 60자 이하 문자열 또는 null이어야 합니다.');
         }
@@ -371,13 +419,18 @@ export class UserProfileService {
         const profileData = {
             bodyType: bodyType,
             analysisId: analysisId, 
-            shoulderWidthCm: measurements.shoulderWidth, // 프론트의 shoulderWidth(숫자)를 DB의 shoulderWidthCm에 매핑
+            shoulderWidthCm: measurements.shoulderWidth, 
             chestCircumference: measurements.chestCircumference,
             waistCircumference: measurements.waistCircumference,
             hipCircumference: measurements.hipCircumference,
             upperBodyLength: measurements.upperBodyLength,
             lowerBodyLength: measurements.lowerBodyLength,
-            legLength: measurements.legLength
+            legLength: measurements.legLength,
+            upperBodyRatio: bodyTypeResult.upperBodyRatio,
+            lowerBodyRatio: bodyTypeResult.lowerBodyRatio,
+            bodyBalance: bodyTypeResult.bodyBalance,
+            shoulderWidth: bodyTypeResult.shoulderWidth,
+            frameSize: bodyTypeResult.frameSize
         };
 
         const profile = await this.client.bodyProfile.upsert({
@@ -390,7 +443,8 @@ export class UserProfileService {
         });
 
         return {
-            bodyProfileId: profile.id
+            bodyProfileId: profile.id,
+            updatedAt: profile.updatedAt
         };
     }
 
