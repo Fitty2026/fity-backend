@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it } from 'node:test';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../src/app.js';
+import { AuthRepository } from '../src/repositories/auth.repository.js';
 import { AuthService } from '../src/services/auth.service.js';
 import { authenticateJwt } from '../src/middlewares/auth-context.middleware.js';
 
 class MemoryAuthRepository {
     constructor() {
         this.users = new Map();
+        this.initialPuzzleBalances = new Map();
         this.nextId = 1;
     }
 
@@ -19,7 +21,7 @@ class MemoryAuthRepository {
         return [...this.users.values()].find((user) => user.username === username) || null;
     }
 
-    async create({ username, email, passwordHash, name }) {
+    async create({ username, email, passwordHash, name, initialPuzzleBalance }) {
         if (this.users.has(email) || await this.findByUsername(username)) {
             const error = new Error('unique constraint');
             error.code = 'P2002';
@@ -27,6 +29,7 @@ class MemoryAuthRepository {
         }
         const user = { id: this.nextId++, username, email, passwordHash, name, createdAt: new Date().toISOString() };
         this.users.set(email, user);
+        this.initialPuzzleBalances.set(user.id, initialPuzzleBalance);
         return user;
     }
 }
@@ -70,6 +73,7 @@ describe('BE1 auth API', () => {
         assert.equal(response.body.result.accessToken, undefined);
         assert.ok(response.body.result.createdAt);
         assert.notEqual(repository.users.get('user@example.com').passwordHash, 'password123');
+        assert.equal(repository.initialPuzzleBalances.get(1), 100);
     });
 
     it('rejects duplicate signup and invalid credential input', async () => {
@@ -215,5 +219,59 @@ describe('BE1 auth API', () => {
             .set('Authorization', 'Bearer invalid');
         assert.equal(rejected.status, 401);
         assert.equal(rejected.body.code, 'AUTH401_03');
+    });
+});
+
+describe('AuthRepository', () => {
+    it('creates the user, initial wallet, and grant ledger in one transaction', async () => {
+        const writes = [];
+        let transactionOptions;
+        const tx = {
+            user: {
+                create: async ({ data }) => {
+                    writes.push(['user', data]);
+                    return { id: 7, createdAt: new Date(), ...data };
+                }
+            },
+            puzzleWallet: {
+                create: async ({ data }) => {
+                    writes.push(['wallet', data]);
+                    return data;
+                }
+            },
+            puzzleTransaction: {
+                create: async ({ data }) => {
+                    writes.push(['ledger', data]);
+                    return data;
+                }
+            }
+        };
+        const repository = new AuthRepository(() => ({
+            $transaction: async (operation, options) => {
+                transactionOptions = options;
+                return operation(tx);
+            }
+        }));
+
+        await repository.create({
+            username: 'fitty1234',
+            email: 'user@example.com',
+            passwordHash: 'hash',
+            name: 'Fitty',
+            initialPuzzleBalance: 100
+        });
+
+        assert.deepEqual(transactionOptions, { isolationLevel: 'Serializable' });
+        assert.deepEqual(writes[1], ['wallet', { userId: 7, balance: 100 }]);
+        assert.deepEqual(writes[2], ['ledger', {
+            userId: 7,
+            type: 'CREDIT',
+            amount: 100,
+            balanceAfter: 100,
+            reason: 'INITIAL_SIGNUP_GRANT',
+            idempotencyKey: 'initial-signup-grant:7',
+            referenceType: 'USER',
+            referenceId: '7'
+        }]);
     });
 });

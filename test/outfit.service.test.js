@@ -501,7 +501,7 @@ describe('OutfitAiAdapter', () => {
 
 describe('OutfitRepository', () => {
     it('creates a new job and debits its puzzle cost in the same transaction', async () => {
-        let balance = 176;
+        let balance = 20;
         const transactions = [];
         const tx = {
             outfitGenerationJob: {
@@ -530,16 +530,16 @@ describe('OutfitRepository', () => {
         const result = await repository.createOrFindActiveJob(
             { userId: 1, closetItemIds: [4], styleTagIds: [], expiresAt: new Date('2026-08-13T00:10:00Z') },
             new Date('2026-08-13T00:00:00Z'),
-            { amount: 88 }
+            { amount: 10 }
         );
 
         assert.equal(result.isExistingJob, false);
-        assert.equal(balance, 88);
+        assert.equal(balance, 10);
         assert.deepEqual(transactions[0], {
             userId: 1,
             type: 'DEBIT',
-            amount: 88,
-            balanceAfter: 88,
+            amount: 10,
+            balanceAfter: 10,
             reason: 'OUTFIT_GENERATION',
             idempotencyKey: 'outfit-generation:31',
             referenceType: 'OUTFIT_GENERATION_JOB',
@@ -561,7 +561,7 @@ describe('OutfitRepository', () => {
         const result = await repository.createOrFindActiveJob(
             { userId: 1 },
             new Date('2026-08-13T00:00:00Z'),
-            { amount: 88 }
+            { amount: 10 }
         );
 
         assert.equal(result.isExistingJob, true);
@@ -589,7 +589,7 @@ describe('OutfitRepository', () => {
             () => repository.createOrFindActiveJob(
                 { userId: 1 },
                 new Date('2026-08-13T00:00:00Z'),
-                { amount: 88 }
+                { amount: 10 }
             ),
             (error) => error.status === 409 && error.code === 'PUZZLE409_01'
         );

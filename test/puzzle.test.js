@@ -80,12 +80,12 @@ describe('puzzle balance', () => {
     it('returns only the authenticated user balance', async () => {
         const repository = new MemoryPuzzleRepository();
         const puzzleService = new PuzzleService({ repository });
-        await puzzleService.credit(1, { amount: 88, reason: 'TEST_GRANT', idempotencyKey: 'grant:user:1' });
+        await puzzleService.credit(1, { amount: 100, reason: 'TEST_GRANT', idempotencyKey: 'grant:user:1' });
         const app = createApp({ puzzleService, authenticate: authenticateForTest, healthCheck: async () => {} });
 
         const mine = await request(app).get('/api/v1/puzzles/balance').set('x-test-user-id', '1');
         assert.equal(mine.status, 200);
-        assert.deepEqual(mine.body.result, { balance: 88, currency: 'PUZZLE' });
+        assert.deepEqual(mine.body.result, { balance: 100, currency: 'PUZZLE' });
 
         const other = await request(app).get('/api/v1/puzzles/balance').set('x-test-user-id', '2');
         assert.equal(other.status, 200);
