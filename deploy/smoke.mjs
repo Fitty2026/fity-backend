@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import { getPrisma, disconnectPrisma } from '../src/config/prisma.js';
-import { PuzzleRepository } from '../src/repositories/puzzle.repository.js';
-import { PuzzleService } from '../src/services/puzzle.service.js';
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000';
 const runId = `${process.env.APP_VERSION || 'local'}-${Date.now()}`.replace(/[^a-zA-Z0-9]/g, '').slice(-24);
@@ -40,14 +38,12 @@ const tokenPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').to
 const smokeUserId = Number(tokenPayload.sub);
 assert.ok(Number.isSafeInteger(smokeUserId) && smokeUserId > 0, 'smoke JWT subject is invalid');
 
-const puzzleService = new PuzzleService({ repository: new PuzzleRepository(getPrisma) });
-await puzzleService.credit(smokeUserId, {
-    amount: Number(process.env.OUTFIT_GENERATION_PUZZLE_COST || 88),
-    reason: 'STAGING_SMOKE_GRANT',
-    idempotencyKey: `staging-smoke-grant:${runId}`,
-    referenceType: 'STAGING_SMOKE',
-    referenceId: runId
+const initialPuzzleBalance = Number(process.env.INITIAL_PUZZLE_BALANCE || 100);
+const generationPuzzleCost = Number(process.env.OUTFIT_GENERATION_PUZZLE_COST || 10);
+const balanceBeforeGeneration = await request('/api/v1/puzzles/balance', {
+    headers: { authorization: `Bearer ${token}` }
 });
+assert.equal(balanceBeforeGeneration.balance, initialPuzzleBalance, 'signup puzzle grant is incorrect');
 
 await request('/api/v1/closets/items', {
     headers: { authorization: `Bearer ${token}` }
@@ -125,6 +121,14 @@ for (let attempt = 0; attempt < 30; attempt += 1) {
 
 assert.ok(completed, 'outfit generation did not complete within 15 seconds');
 assert.equal(completed.generatedImage?.fallbackUsed, true, 'staging fallback path was not used');
+const balanceAfterGeneration = await request('/api/v1/puzzles/balance', {
+    headers: { authorization: `Bearer ${token}` }
+});
+assert.equal(
+    balanceAfterGeneration.balance,
+    initialPuzzleBalance - generationPuzzleCost,
+    'outfit generation puzzle debit is incorrect'
+);
 
 await request(`/api/v1/closets/items/${closetItem.item_id}`, {
     method: 'DELETE',

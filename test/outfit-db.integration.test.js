@@ -44,7 +44,7 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
             }
         });
         await prisma.bodyProfile.create({ data: { userId: owner.id } });
-        await prisma.puzzleWallet.create({ data: { userId: owner.id, balance: 176 } });
+        await prisma.puzzleWallet.create({ data: { userId: owner.id, balance: 20 } });
 
         const service = new OutfitService({
             repository: new OutfitRepository(prisma),
@@ -69,7 +69,7 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
         });
         assert.equal(created.status, 'queued');
         assert.equal(created.isExistingJob, false);
-        assert.equal((await prisma.puzzleWallet.findUnique({ where: { userId: owner.id } })).balance, 88);
+        assert.equal((await prisma.puzzleWallet.findUnique({ where: { userId: owner.id } })).balance, 10);
         assert.equal(await prisma.puzzleTransaction.count({ where: { userId: owner.id, reason: 'OUTFIT_GENERATION' } }), 1);
         const persistedJob = await prisma.outfitGenerationJob.findUnique({ where: { id: created.jobId } });
         assert.equal(persistedJob.inputSnapshot.schemaVersion, 'outfit-input-v1');

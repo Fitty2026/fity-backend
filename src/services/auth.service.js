@@ -6,6 +6,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_PATTERN = /^[a-zA-Z0-9]+$/;
 const PASSWORD_PATTERN = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+~`|}{[\]:;?><,./-]).{8,72}$/;
 const SIGNUP_FIELDS = new Set(['name', 'loginId', 'email', 'password']);
+const DEFAULT_INITIAL_PUZZLE_BALANCE = 100;
 
 const createRequestError = (message, code = 'AUTH400_01') => {
     const error = new Error(message);
@@ -83,9 +84,24 @@ const getJwtConfig = () => {
 };
 
 export class AuthService {
-    constructor({ repository, jwtConfig = getJwtConfig }) {
+    constructor({
+        repository,
+        jwtConfig = getJwtConfig,
+        initialPuzzleBalance = Number(process.env.INITIAL_PUZZLE_BALANCE ?? DEFAULT_INITIAL_PUZZLE_BALANCE)
+    }) {
+        if (!Number.isSafeInteger(initialPuzzleBalance) || initialPuzzleBalance <= 0) {
+            throw new TypeError('initialPuzzleBalance must be a positive safe integer.');
+        }
         this.repository = repository;
         this.jwtConfig = jwtConfig;
+        this.initialPuzzleBalance = initialPuzzleBalance;
+    }
+
+    createUser(data) {
+        return this.repository.create({
+            ...data,
+            initialPuzzleBalance: this.initialPuzzleBalance
+        });
     }
 
     async signup(input) {
@@ -104,7 +120,7 @@ export class AuthService {
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
         let user;
         try {
-            user = await this.repository.create({ username, email, passwordHash, name });
+            user = await this.createUser({ username, email, passwordHash, name });
         } catch (error) {
             if (error?.code === 'P2002') {
                 const target = uniqueConstraintTarget(error);
@@ -193,7 +209,7 @@ export class AuthService {
 
             if (!user) {
                 const dummyPasswordHash = await bcrypt.hash(Date.now().toString(), SALT_ROUNDS);
-                user = await this.repository.create({
+                user = await this.createUser({
                     username: `${provider}_${Date.now()}`,
                     email: email,
                     passwordHash: dummyPasswordHash,
@@ -218,7 +234,7 @@ export class AuthService {
             const fallbackUsername = `mock_${provider}_${Date.now()}`;
             const dummyPasswordHash = await bcrypt.hash('MockPassword123!', SALT_ROUNDS);
 
-            user = await this.repository.create({
+            user = await this.createUser({
                 username: fallbackUsername,
                 email: fallbackEmail,
                 passwordHash: dummyPasswordHash,

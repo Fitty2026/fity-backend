@@ -5,7 +5,7 @@ const WEATHER_CONDITIONS = new Set(['SUNNY', 'CLOUDY', 'RAINY', 'SNOWY', 'WINDY'
 const JOB_TTL_MS = 10 * 60 * 1000;
 const RESULT_TTL_MS = 24 * 60 * 60 * 1000;
 const INPUT_SCHEMA_VERSION = 'outfit-input-v1';
-const DEFAULT_OUTFIT_GENERATION_PUZZLE_COST = 88;
+const DEFAULT_OUTFIT_GENERATION_PUZZLE_COST = 10;
 const IMAGE_CONTENT_PATH = /^\/api\/v1\/images\/(\d+)\/content(?:\?.*)?$/;
 const presentImageUrl = (imageUrl, imageUrlSigner) => {
     if (!imageUrlSigner || typeof imageUrl !== 'string') return imageUrl;
