@@ -85,6 +85,23 @@ await request('/api/v1/body-profiles/type', json('POST', {
     bodyType: 'STRAIGHT'
 }, token));
 
+await getPrisma().bodyProfile.upsert({
+    where: { userId: smokeUserId },
+    create: {
+        userId: smokeUserId,
+        bodyType: 'STRAIGHT',
+        bodyBalance: 'BALANCED',
+        shoulderWidth: 'AVERAGE',
+        frameSize: 'MEDIUM'
+    },
+    update: {
+        bodyType: 'STRAIGHT',
+        bodyBalance: 'BALANCED',
+        shoulderWidth: 'AVERAGE',
+        frameSize: 'MEDIUM'
+    }
+});
+
 const generation = await request('/api/v1/outfits/generation-jobs', json('POST', {
     closetItemIds: [closetItem.item_id],
     styleTagIds: [1]
