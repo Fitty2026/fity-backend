@@ -48,4 +48,10 @@ describe('BE4 OpenAPI contract', () => {
         assert.equal(schema.properties.balance.minimum, 0);
         assert.equal(schema.properties.currency.const, 'PUZZLE');
     });
+
+    it('documents the thirty-day saved outfit trash contract', () => {
+        const remaining = specification.components.schemas.SavedOutfit.properties.deletionDaysRemaining;
+        assert.equal(remaining.minimum, 0);
+        assert.equal(remaining.maximum, 30);
+    });
 });

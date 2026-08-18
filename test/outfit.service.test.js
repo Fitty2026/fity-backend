@@ -51,6 +51,7 @@ class MemoryOutfitRepository {
     async expireCompletedJob(id) { const job = this.jobs.find((item) => item.id === id && item.status === 'COMPLETED'); if (!job) return { count: 0 }; job.status = 'EXPIRED'; job.failureCode = 'RESULT_EXPIRED'; job.failureReason = 'Unsaved outfit result expired.'; return { count: 1 }; }
     async expireAllStaleActiveJobs(now = new Date()) { let count = 0; for (const job of this.jobs) if (['QUEUED', 'PROCESSING', 'QC_PENDING'].includes(job.status) && job.expiresAt <= now) { job.status = 'EXPIRED'; job.failureCode = 'JOB_TIMEOUT'; job.failureReason = 'Outfit generation job expired.'; job.completedAt = now; count++; } return { count }; }
     async expireAllCompletedJobs(cutoff) { let count = 0; for (const job of this.jobs) { const result = this.results.find((item) => item.generationJobId === job.id); const saved = result && this.saved.some((item) => item.outfitResultId === result.id); if (job.status === 'COMPLETED' && job.completedAt <= cutoff && !saved) { job.status = 'EXPIRED'; job.failureCode = 'RESULT_EXPIRED'; job.failureReason = 'Unsaved outfit result expired.'; count++; } } return { count }; }
+    async purgeDeletedSavedOutfits(deletedBefore) { const before = this.saved.length; this.saved = this.saved.filter((item) => !item.deletedAt || item.deletedAt > deletedBefore); return { count: before - this.saved.length }; }
     async claimQueuedJob(id, now = new Date()) { const job = this.jobs.find((item) => item.id === id && item.status === 'QUEUED' && item.expiresAt > now); if (!job) return null; job.status = 'PROCESSING'; job.progress = 70; job.startedAt = now; return { ...job }; }
     async markQcPending(id) { const job = this.jobs.find((item) => item.id === id && item.status === 'PROCESSING'); if (!job) return { count: 0 }; job.status = 'QC_PENDING'; job.progress = 90; return { count: 1 }; }
     async completeJob({ job, aiResult }) { const result = { id: this.next++, userId: job.userId, generationJobId: job.id, createdAt: new Date(), ...aiResult }; this.results.push(result); const target = this.jobs.find((item) => item.id === job.id); target.status = 'COMPLETED'; target.progress = 100; target.completedAt = new Date(); return result; }
@@ -61,7 +62,7 @@ class MemoryOutfitRepository {
     async findSaved(userId, id) { return this.saved.find((item) => item.id === id && item.userId === userId && !item.deletedAt) || null; }
     async updateSaved(userId, id, data) { const item = await this.findSaved(userId, id); if (!item) return null; Object.assign(item, data, { updatedAt: new Date() }); return item; }
     async softDeleteSaved(userId, id, deletedAt = new Date()) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && !saved.deletedAt); if (!item) return { count: 0 }; item.deletedAt = deletedAt; return { count: 1 }; }
-    async restoreSaved(userId, id) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && saved.deletedAt); if (!item) return { count: 0 }; item.deletedAt = null; return { count: 1 }; }
+    async restoreSaved(userId, id, deletedAfter) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && saved.deletedAt && saved.deletedAt > deletedAfter); if (!item) return { count: 0 }; item.deletedAt = null; return { count: 1 }; }
     async permanentDeleteSaved(userId, id) { const index = this.saved.findIndex((saved) => saved.id === id && saved.userId === userId && saved.deletedAt); if (index < 0) return { count: 0 }; this.saved.splice(index, 1); return { count: 1 }; }
 }
 
@@ -265,7 +266,9 @@ describe('OutfitService', () => {
         assert.equal(deleted.savedOutfitId, saved.id);
         assert.ok(deleted.deletedAt instanceof Date);
         assert.equal((await service.getSavedOutfits(1, {})).pagination.totalCount, 0);
-        assert.equal((await service.getDeletedSavedOutfits(1, {})).pagination.totalCount, 1);
+        const deletedList = await service.getDeletedSavedOutfits(1, {});
+        assert.equal(deletedList.pagination.totalCount, 1);
+        assert.equal(deletedList.items[0].deletionDaysRemaining, 30);
         const restored = await service.restoreSavedOutfit(1, saved.id);
         assert.equal(restored.deletedAt, null);
         assert.ok(restored.restoredAt instanceof Date);
@@ -365,7 +368,7 @@ describe('OutfitService', () => {
         const stalled = await service.createGenerationJob(1, { closetItemIds: [4] });
         repository.jobs.find((job) => job.id === stalled.jobId).expiresAt = new Date('2026-08-05T11:59:59.000Z');
         let cleaned = await service.cleanupExpiredJobs();
-        assert.deepEqual(cleaned, { staleJobs: 1, expiredResults: 0 });
+        assert.deepEqual(cleaned, { staleJobs: 1, expiredResults: 0, expiredDeletedOutfits: 0 });
 
         const unsaved = await service.createGenerationJob(1, { closetItemIds: [4] });
         await service.processGenerationJob(unsaved.jobId);
@@ -385,6 +388,22 @@ describe('OutfitService', () => {
         cleaned = await service.cleanupExpiredJobs();
         assert.equal(cleaned.expiredResults, 0);
         assert.equal(repository.jobs.find((job) => job.id === kept.jobId).status, 'COMPLETED');
+    });
+    it('permanently removes soft-deleted saved outfits after thirty days', async () => {
+        const repository = new MemoryOutfitRepository();
+        let now = new Date('2026-08-01T12:00:00.000Z');
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter, now: () => now });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] });
+        await service.processGenerationJob(created.jobId);
+        const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
+        const saved = await service.saveOutfit(1, { outfitResultId: resultId });
+        await service.deleteSavedOutfit(1, saved.id);
+
+        now = new Date('2026-08-31T12:00:00.001Z');
+        const cleaned = await service.cleanupExpiredJobs();
+        assert.equal(cleaned.expiredDeletedOutfits, 1);
+        assert.equal((await service.getDeletedSavedOutfits(1, {})).pagination.totalCount, 0);
+        await assert.rejects(() => service.restoreSavedOutfit(1, saved.id), { code: 'NOT_FOUND404' });
     });
     for (const [name, adapter] of [
         ['timeout', { generate: async () => { const error = new Error('timeout'); error.code = 'AI_TIMEOUT'; throw error; } }],

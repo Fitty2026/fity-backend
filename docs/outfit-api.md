@@ -217,6 +217,8 @@ soft delete되지 않은 본인 소유 코디 한 건을 SAVED-02 항목과 같�
 `GET /api/v1/outfits/saved/deleted?page=1&size=10`
 
 본인의 `deletedAt != null`인 코디만 `deletedAt` 최신순으로 반환합니다.
+각 항목에는 `deletionDaysRemaining`(0~30)이 추가됩니다. 삭제 후 30일이 지난
+항목은 서버 정리 작업에서 영구 삭제되므로 목록에 포함되지 않습니다.
 
 ## SAVED-07 삭제 코디 복구
 
@@ -234,7 +236,8 @@ soft delete되지 않은 본인 소유 코디 한 건을 SAVED-02 항목과 같�
 
 `DELETE /api/v1/outfits/saved/:savedOutfitId/permanent`
 
-먼저 soft delete된 본인 코디만 영구 삭제할 수 있습니다. 성공 결과는 `null`입니다. 자동 영구 삭제 보관 기간은 정책 확정 전까지 적용하지 않습니다.
+먼저 soft delete된 본인 코디만 영구 삭제할 수 있습니다. 성공 결과는 `null`입니다.
+soft delete 후 30일이 지나면 서버가 자동 영구 삭제하며 이후에는 복구할 수 없습니다.
 
 ## 내부 처리 및 복구 worker
 

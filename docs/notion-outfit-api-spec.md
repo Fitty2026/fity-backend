@@ -397,6 +397,8 @@
 - Query String: `page` 기본 1, `size` 기본 10 및 최대 50
 - Request Body: 없음
 - Response Body: SAVED-02와 동일하며 `deletedAt`이 있는 항목만 최신 삭제순 반환
+- 각 항목에 `deletionDaysRemaining`(0~30)을 포함
+- 삭제 후 30일이 지난 항목은 서버에서 자동 영구 삭제되어 목록 및 복구 대상에서 제외
 
 ### Error
 
