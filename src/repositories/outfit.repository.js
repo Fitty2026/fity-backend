@@ -279,8 +279,17 @@ export class OutfitRepository {
         return this.prisma.savedOutfit.updateMany({ where: { id, userId, deletedAt: null }, data: { deletedAt } });
     }
 
-    restoreSaved(userId, id) {
-        return this.prisma.savedOutfit.updateMany({ where: { id, userId, deletedAt: { not: null } }, data: { deletedAt: null } });
+    restoreSaved(userId, id, deletedAfter) {
+        return this.prisma.savedOutfit.updateMany({
+            where: { id, userId, deletedAt: { not: null, gt: deletedAfter } },
+            data: { deletedAt: null }
+        });
+    }
+
+    purgeDeletedSavedOutfits(deletedBefore) {
+        return this.prisma.savedOutfit.deleteMany({
+            where: { deletedAt: { not: null, lte: deletedBefore } }
+        });
     }
 
     permanentDeleteSaved(userId, id) {

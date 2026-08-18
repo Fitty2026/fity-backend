@@ -232,6 +232,10 @@
           "styleTags": { "type": "array", "items": { "type": "integer" } },
           "tags": { "type": "array", "items": { "type": "string" } },
           "memo": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "deletedAt": { "type": [ "string", "null" ], "format": "date-time" },
+          "deletionDaysRemaining": { "type": "integer", "minimum": 0, "maximum": 30 },
           "isSaved": { "type": "boolean" }
         }
       },

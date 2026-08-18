@@ -4,6 +4,7 @@ const SITUATIONS = new Set(['DATE', 'WORK', 'SCHOOL', 'TRAVEL']);
 const WEATHER_CONDITIONS = new Set(['SUNNY', 'CLOUDY', 'RAINY', 'SNOWY', 'WINDY', 'UNKNOWN']);
 const JOB_TTL_MS = 10 * 60 * 1000;
 const RESULT_TTL_MS = 24 * 60 * 60 * 1000;
+const DELETED_OUTFIT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const INPUT_SCHEMA_VERSION = 'outfit-input-v1';
 const DEFAULT_OUTFIT_GENERATION_PUZZLE_COST = 10;
 const IMAGE_CONTENT_PATH = /^\/api\/v1\/images\/(\d+)\/content(?:\?.*)?$/;
@@ -208,7 +209,7 @@ const toRevision = (job, revision) => ({
     expiresAt: job.expiresAt
 });
 
-const toSaved = (saved, imageUrlSigner) => ({
+const toSaved = (saved, imageUrlSigner, now = new Date()) => ({
     id: saved.id,
     savedOutfitId: saved.id,
     outfitResultId: saved.outfitResultId,
@@ -224,6 +225,11 @@ const toSaved = (saved, imageUrlSigner) => ({
     createdAt: saved.createdAt,
     updatedAt: saved.updatedAt,
     deletedAt: saved.deletedAt,
+    ...(saved.deletedAt ? {
+        deletionDaysRemaining: Math.max(0, Math.ceil(
+            (new Date(saved.deletedAt).getTime() + DELETED_OUTFIT_TTL_MS - now.getTime()) / (24 * 60 * 60 * 1000)
+        ))
+    } : {}),
     isSaved: true
 });
 
@@ -264,7 +270,7 @@ export class OutfitService {
     }
 
     toSaved(saved) {
-        return toSaved(saved, this.imageUrlSigner);
+        return toSaved(saved, this.imageUrlSigner, this.now());
     }
 
     fallbackImageUrlFor(jobId) {
@@ -502,11 +508,17 @@ export class OutfitService {
     async cleanupExpiredJobs() {
         const now = this.now();
         const cutoff = new Date(now.getTime() - RESULT_TTL_MS);
-        const [staleJobs, expiredResults] = await Promise.all([
+        const deletedOutfitCutoff = new Date(now.getTime() - DELETED_OUTFIT_TTL_MS);
+        const [staleJobs, expiredResults, expiredDeletedOutfits] = await Promise.all([
             this.repository.expireAllStaleActiveJobs(now),
-            this.repository.expireAllCompletedJobs(cutoff)
+            this.repository.expireAllCompletedJobs(cutoff),
+            this.repository.purgeDeletedSavedOutfits(deletedOutfitCutoff)
         ]);
-        return { staleJobs: staleJobs.count, expiredResults: expiredResults.count };
+        return {
+            staleJobs: staleJobs.count,
+            expiredResults: expiredResults.count,
+            expiredDeletedOutfits: expiredDeletedOutfits.count
+        };
     }
 
     async saveOutfit(userId, { outfitResultId, name, tags, memo } = {}) {
@@ -534,6 +546,9 @@ export class OutfitService {
 
     async getDeletedSavedOutfits(userId, query) {
         const { page, size } = pagination(query);
+        await this.repository.purgeDeletedSavedOutfits(
+            new Date(this.now().getTime() - DELETED_OUTFIT_TTL_MS)
+        );
         const [items, totalCount] = await this.repository.listSaved(userId, (page - 1) * size, size, true);
         return { items: items.map((item) => this.toSaved(item)), pagination: { page, size, totalCount } };
     }
@@ -566,7 +581,11 @@ export class OutfitService {
     async restoreSavedOutfit(userId, rawId) {
         const savedOutfitId = positiveId(rawId, 'savedOutfitId');
         const restoredAt = this.now();
-        const changed = await this.repository.restoreSaved(userId, savedOutfitId);
+        const changed = await this.repository.restoreSaved(
+            userId,
+            savedOutfitId,
+            new Date(restoredAt.getTime() - DELETED_OUTFIT_TTL_MS)
+        );
         if (changed.count !== 1) throw httpError(404, 'NOT_FOUND404', 'Deleted saved outfit was not found.');
         return { savedOutfitId, deletedAt: null, restoredAt };
     }
