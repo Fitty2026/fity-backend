@@ -370,8 +370,18 @@ export class OutfitService {
     async getActiveGenerationJob(userId) {
         const now = this.now();
         await this.repository.expireStaleActiveJobs(userId, now);
-        const job = await this.repository.findActiveJob(userId, now);
-        return job ? this.toJob(job, { isExistingJob: true, includeInput: true, includeResult: false }) : null;
+        const activeJob = await this.repository.findActiveJob(userId, now);
+        if (activeJob) {
+            return this.toJob(activeJob, { isExistingJob: true, includeInput: true, includeResult: false });
+        }
+
+        // A loading-page refresh loses its route state. Return the latest still-valid
+        // completed result so the client can poll it once and resume the result screen.
+        const resumableJob = await this.repository.findLatestResumableJob(
+            userId,
+            new Date(now.getTime() - RESULT_TTL_MS)
+        );
+        return resumableJob ? this.toJob(resumableJob, { isExistingJob: true, includeInput: true }) : null;
     }
 
     async createRevision(userId, rawResultId, input = {}, rawIdempotencyKey) {

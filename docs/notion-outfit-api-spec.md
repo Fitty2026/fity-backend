@@ -336,8 +336,8 @@
 - Path Variable: 없음
 - Query String: 없음
 - Request Body: 없음
-- Response Body: 진행 중 job이 있으면 OUTFIT-01의 `result`와 같은 job, input, expiresAt 구조
-- 진행 중 job이 없으면 `COMMON200`과 `result: null`
+- Response Body: 진행 중 job이 있으면 OUTFIT-01의 `result`와 같은 job, input, expiresAt 구조. 진행 중 job이 없더라도 저장하지 않은 완료 결과가 24시간 이내라면 마지막 완료 job을 반환
+- 진행 중 job과 24시간 이내 완료 결과가 모두 없으면 `COMMON200`과 `result: null`
 
 ### Error
 

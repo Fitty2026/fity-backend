@@ -46,6 +46,12 @@ class MemoryOutfitRepository {
     async findJob(userId, id) { const job = this.jobs.find((item) => item.id === id && item.userId === userId); const result = this.results.find((r) => r.generationJobId === job?.id); return job && { ...job, revision: this.revisions.find((r) => r.generationJobId === job.id) || null, result: result ? { ...result, savedOutfits: this.saved.filter((s) => s.outfitResultId === result.id) } : null }; }
     async findJobByIdempotencyKey(userId, idempotencyKey) { const job = this.jobs.find((item) => item.userId === userId && item.idempotencyKey === idempotencyKey); return job ? this.findJob(userId, job.id) : null; }
     async findActiveJob(userId, now = new Date()) { return this.jobs.find((job) => job.userId === userId && ['QUEUED', 'PROCESSING', 'QC_PENDING'].includes(job.status) && job.expiresAt > now) || null; }
+    async findLatestResumableJob(userId, completedAfter) {
+        const job = this.jobs
+            .filter((job) => job.userId === userId && job.status === 'COMPLETED' && job.completedAt > completedAfter)
+            .sort((left, right) => right.completedAt - left.completedAt)[0] || null;
+        return job ? this.findJob(userId, job.id) : null;
+    }
     async listQueuedJobIds(limit = 5, now = new Date()) { return this.jobs.filter((job) => job.status === 'QUEUED' && job.expiresAt > now).slice(0, limit).map((job) => job.id); }
     async expireStaleActiveJobs(userId, now = new Date()) { let count = 0; for (const job of this.jobs) if (job.userId === userId && ['QUEUED', 'PROCESSING', 'QC_PENDING'].includes(job.status) && job.expiresAt <= now) { job.status = 'EXPIRED'; job.failureCode = 'JOB_TIMEOUT'; job.failureReason = 'Outfit generation job expired.'; job.completedAt = now; count++; } return { count }; }
     async expireCompletedJob(id) { const job = this.jobs.find((item) => item.id === id && item.status === 'COMPLETED'); if (!job) return { count: 0 }; job.status = 'EXPIRED'; job.failureCode = 'RESULT_EXPIRED'; job.failureReason = 'Unsaved outfit result expired.'; return { count: 1 }; }
@@ -185,6 +191,19 @@ describe('OutfitService', () => {
         assert.equal(job.status, 'expired');
         assert.equal(job.failure.code, 'JOB_TIMEOUT');
         assert.equal(await service.getActiveGenerationJob(1), null);
+    });
+    it('returns the latest valid completed job for loading-page resume', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] });
+        await service.processGenerationJob(created.jobId);
+
+        const resumed = await service.getActiveGenerationJob(1);
+
+        assert.equal(resumed.jobId, created.jobId);
+        assert.equal(resumed.status, 'completed');
+        assert.equal(resumed.outfitResultId, 2);
+        assert.equal(resumed.generatedImageUrl, 'https://ai.example/outfit.png');
     });
     it('completes with the static fallback when the adapter fails', async () => {
         const repository = new MemoryOutfitRepository();

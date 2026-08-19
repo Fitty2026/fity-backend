@@ -288,6 +288,31 @@ test('body profile lookup 404s when nothing was saved', async () => {
     assert.equal(response.body.code, 'PROFILE404_01');
 });
 
+test('body profile lookup supports the three base onboarding body types', async () => {
+    prisma.state.bodyProfiles.set(7, {
+        id: 1,
+        userId: 7,
+        bodyType: 'WAVE',
+        bodyBalance: 'BALANCED',
+        shoulderWidth: 'AVERAGE',
+        frameSize: 'MEDIUM',
+        shoulderWidthCm: null,
+        chestCircumference: null,
+        waistCircumference: null,
+        hipCircumference: null,
+        upperBodyLength: null,
+        lowerBodyLength: null,
+        legLength: null,
+        upperBodyRatio: null,
+        lowerBodyRatio: null,
+        updatedAt: new Date().toISOString()
+    });
+
+    const response = await api.get('/api/v1/body-profiles/me').set('x-test-user-id', '7');
+    assert.equal(response.status, 200);
+    assert.equal(response.body.result.bodyTypeResult.bodyTypeName, '슬림 웨이브');
+});
+
 test('body profile analyze is an MVP stub that upserts a deterministic result from an owned BODY_PROFILE image', async () => {
     const analyzed = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({ userId: 8, imageId: 12 });
     assert.ok(analyzed.status === 200 || analyzed.status === 400);
