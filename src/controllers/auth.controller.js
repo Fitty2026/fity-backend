@@ -26,8 +26,45 @@ export const createAuthController = (authService) => ({
     },
     socialLogin: async (req, res, next) => {
         try {
-            const result = await authService.socialLogin(req.body || {});
+            const input = { 
+                ...(req.body || {}), 
+                provider: req.params.provider 
+            };
+            const result = await authService.socialLogin(input);
             return sendResponse(res, result, '소셜 로그인에 성공했습니다.');
+        } catch (error) {
+            return next(error);
+        }
+    },
+    requestPasswordResetCode: async (req, res, next) => {
+        try {
+            await authService.requestPasswordResetCode(req.body || {});
+            return sendResponse(res, null, '인증번호가 발송되었습니다.');
+        } catch (error) {
+            return next(error);
+        }
+    },
+    verifyPasswordResetCode: async (req, res, next) => {
+        try {
+            const result = await authService.verifyPasswordResetCode(req.body || {});
+            return sendResponse(res, result, '인증이 완료되었습니다.');
+        } catch (error) {
+            return next(error);
+        }
+    },
+    resetPassword: async (req, res, next) => {
+        try {
+            const authHeader = req.headers.authorization;
+            const resetToken = authHeader && authHeader.startsWith('Bearer ') 
+                ? authHeader.split(' ')[1] 
+                : null;
+            const input = {
+                ...(req.body || {}),
+                resetToken
+            };
+            
+            await authService.resetPassword(input);
+            return sendResponse(res, null, '비밀번호가 성공적으로 변경되었습니다.');
         } catch (error) {
             return next(error);
         }

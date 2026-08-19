@@ -1,5 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 const SALT_ROUNDS = 12;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -7,6 +9,7 @@ const USERNAME_PATTERN = /^[a-zA-Z0-9]+$/;
 const PASSWORD_PATTERN = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+~`|}{[\]:;?><,./-]).{8,72}$/;
 const SIGNUP_FIELDS = new Set(['name', 'loginId', 'email', 'password']);
 const DEFAULT_INITIAL_PUZZLE_BALANCE = 100;
+const verificationCodes = new Map();
 
 const createRequestError = (message, code = 'AUTH400_01') => {
     const error = new Error(message);
@@ -173,10 +176,6 @@ export class AuthService {
 
     async socialLogin(input) {
         const { provider, accessToken } = input;
-        
-        if (provider === 'apple') {
-            throw createRequestError('현재 애플 로그인은 준비 중입니다.', 'AUTH400_03');
-        }
 
         if (!['kakao', 'google'].includes(provider)) {
             throw createRequestError('지원하지 않는 소셜 로그인 제공자입니다.', 'AUTH400_02');
@@ -243,5 +242,154 @@ export class AuthService {
         }
 
         return this.createAuthResult(user);
+    }
+    async requestPasswordResetCode({ email }) {
+        const normalizedEmail = normalizeEmail(email);
+        
+        if (!EMAIL_PATTERN.test(normalizedEmail) || normalizedEmail.length > 191) {
+            throw createRequestError('유효한 이메일 주소를 입력해 주세요.', 'AUTH400_04');
+        }
+
+        const user = await this.repository.findByEmail(normalizedEmail);
+        if (!user) {
+            const err = new Error('가입되지 않은 이메일 주소입니다.');
+            err.status = 404;
+            err.code = 'AUTH404_01';
+            throw err;
+        }
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = Date.now() + 3 * 60 * 1000;
+        verificationCodes.set(normalizedEmail, { code, expiresAt });
+
+        try {
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: process.env.SMTP_USER, 
+                    pass: process.env.SMTP_PASS  
+                }
+            });
+
+            const mailOptions = {
+                from: `"Fitty 고객센터" <${process.env.SMTP_USER}>`,
+                to: normalizedEmail,
+                subject: '[Fitty] 비밀번호 찾기 인증번호 안내',
+                html: `
+                    <div style="font-family: sans-serif; padding: 20px;">
+                        <h2>비밀번호 찾기 인증번호</h2>
+                        <p>안녕하세요, Fitty입니다.</p>
+                        <p>요청하신 비밀번호 재설정 인증번호는 다음과 같습니다.</p>
+                        <h3 style="color: #4CAF50; letter-spacing: 5px;">${code}</h3>
+                        <p>본 인증번호는 3분 동안 유효합니다.</p>
+                    </div>
+                `
+            };
+
+            await transporter.sendMail(mailOptions);
+            console.log(`📩 [비밀번호 찾기] ${normalizedEmail}로 인증번호 발송 완료`);
+        } catch (error) {
+            console.error("🔥 이메일 발송 실패:", error);
+            const err = new Error('이메일 발송에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+            err.status = 500;
+            err.code = 'AUTH500_03';
+            throw err;
+        }
+
+        return true; 
+    }
+    async verifyPasswordResetCode({ email, code }) {
+        const normalizedEmail = normalizeEmail(email);
+        const record = verificationCodes.get(normalizedEmail);
+
+        if (!record) {
+            const err = new Error('인증 요청 내역이 없거나 만료되었습니다.');
+            err.status = 410;
+            err.code = 'AUTH410_01';
+            throw err;
+        }
+
+        if (Date.now() > record.expiresAt) {
+            verificationCodes.delete(normalizedEmail);
+            const err = new Error('인증번호 입력 시간이 초과되었습니다. 다시 요청해 주세요.');
+            err.status = 410;
+            err.code = 'AUTH410_01';
+            throw err;
+        }
+
+        if (record.code !== String(code)) {
+            const err = new Error('인증번호가 일치하지 않습니다.');
+            err.status = 401;
+            err.code = 'AUTH401_04';
+            throw err;
+        }
+
+        verificationCodes.delete(normalizedEmail);
+        const { secret } = this.jwtConfig();
+        
+        const resetToken = jwt.sign(
+            { email: normalizedEmail, purpose: 'password_reset' }, 
+            secret, 
+            { expiresIn: '5m' }
+        );
+
+        return { resetToken };
+    }
+
+    async resetPassword({ resetToken, newPassword, confirmPassword }) {
+        if (!resetToken) {
+            const err = new Error('인증 토큰이 누락되었습니다.');
+            err.status = 401;
+            err.code = 'AUTH401_01';
+            throw err;
+        }
+
+        if (newPassword !== confirmPassword) {
+            throw createRequestError('비밀번호가 일치하지 않습니다.', 'AUTH400_05');
+        }
+
+        if (!PASSWORD_PATTERN.test(newPassword)) {
+            throw createRequestError('비밀번호는 영문, 숫자, 특수문자 포함 6자 이상이어야 합니다.', 'AUTH400_06');
+        }
+
+        const { secret } = this.jwtConfig();
+        let decoded;
+        try {
+            decoded = jwt.verify(resetToken, secret);
+            if (decoded.purpose !== 'password_reset') {
+                throw new Error('토큰 목적이 일치하지 않음');
+            }
+        } catch (error) {
+            if (error.name === 'TokenExpiredError') {
+                const err = new Error('만료된 토큰입니다. 다시 시도해 주세요.');
+                err.status = 401;
+                err.code = 'AUTH401_02';
+                throw err;
+            }
+            const err = new Error('유효하지 않은 인증 토큰입니다.');
+            err.status = 401;
+            err.code = 'AUTH401_03';
+            throw err;
+        }
+
+        const user = await this.repository.findByEmail(decoded.email);
+        if (!user) {
+            const err = new Error('가입되지 않은 이메일 주소입니다.');
+            err.status = 404;
+            err.code = 'AUTH404_01';
+            throw err;
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+        
+        if (this.repository.updatePassword) {
+            await this.repository.updatePassword(user.id, passwordHash);
+        } else if (this.repository.update) {
+            await this.repository.update(user.id, { passwordHash });
+        } else {
+            console.error("AuthRepository에 유저를 업데이트하는 메서드가 없습니다.");
+            throw createRequestError('서버 오류: 비밀번호 업데이트 로직 누락', 'AUTH500_02');
+        }
+
+        return true;
     }
 }

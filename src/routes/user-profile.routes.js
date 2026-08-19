@@ -7,7 +7,8 @@ export const createUserProfileRouter = ({ userProfileService, authenticate }) =>
     const controller = createUserProfileController(userProfileService);
 
     router.get('/users/me', authenticate, controller.getMe);
-    router.patch('/users/me', authenticate, controller.updateMe);
+    router.patch('/users/me', authenticate, controller.updateProfile);
+    router.delete('/users/me', authenticate, controller.withdrawUser);
     router.post('/users/agreements', authenticate, controller.saveAgreements);
     router.get('/style-tags', authenticate, controller.listStyleTags);
     router.post('/users/onboarding/style', authenticate, controller.saveOnboardingStyles);
