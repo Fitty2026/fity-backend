@@ -36,4 +36,10 @@ export class AuthRepository {
             return user;
         }, { isolationLevel: 'Serializable' });
     }
+    async updatePassword(userId, passwordHash) {
+        return this.getPrisma().user.update({
+            where: { id: userId },
+            data: { passwordHash }
+        });
+    }
 }

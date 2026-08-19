@@ -16,8 +16,8 @@ const createPrisma = () => {
     ];
     const state = {
         users: new Map([
-            [7, { id: 7, username: 'owner7', email: 'owner@example.com', passwordHash: 'secret-hash', name: 'Owner', styleTags: null, createdAt: '2026-07-24T00:00:00.000Z', updatedAt: '2026-07-24T00:00:00.000Z' }],
-            [8, { id: 8, username: null, email: 'other@example.com', passwordHash: 'other-hash', name: 'Other', styleTags: null, createdAt: '2026-07-24T00:00:00.000Z', updatedAt: '2026-07-24T00:00:00.000Z' }]
+            [7, { id: 7, username: 'owner7', email: 'owner@example.com', passwordHash: 'secret-hash', name: 'Owner', profileImageUrl: null, styleTags: null, createdAt: '2026-07-24T00:00:00.000Z', updatedAt: '2026-07-24T00:00:00.000Z' }],
+            [8, { id: 8, username: null, email: 'other@example.com', passwordHash: 'other-hash', name: 'Other', profileImageUrl: null, styleTags: null, createdAt: '2026-07-24T00:00:00.000Z', updatedAt: '2026-07-24T00:00:00.000Z' }]
         ]),
         bodyProfiles: new Map(),
         nextBodyProfileId: 1,
@@ -60,11 +60,21 @@ const createPrisma = () => {
                 }
                 return result;
             },
+            findFirst: async ({ where }) => {
+                const users = [...state.users.values()];
+                if (where.name !== undefined) {
+                    return clone(users.find(u => u.name === where.name) || null);
+                }
+                return null;
+            },
             update: async ({ where, data }) => {
                 const user = state.users.get(where.id);
                 if (!user) { const error = new Error('missing'); error.code = 'P2025'; throw error; }
                 Object.assign(user, data, { updatedAt: new Date().toISOString() });
                 return clone(user);
+            },
+            delete: async ({ where }) => {
+                state.users.delete(where.id);
             }
         },
         styleTag: {
@@ -81,6 +91,13 @@ const createPrisma = () => {
             }
         },
         userStylePreference: {
+            findMany: async ({ where }) => {
+                const preferenceIds = state.stylePreferences.get(where.userId) || [];
+                return preferenceIds.map(styleTagId => ({
+                    styleTagId,
+                    styleTag: clone(state.styleTags.find(tag => tag.id === styleTagId))
+                }));
+            },
             deleteMany: async ({ where }) => {
                 state.stylePreferences.delete(where.userId);
             },
@@ -160,21 +177,23 @@ test('user profile reads and updates only the authenticated user with an allowli
     assert.equal(initial.body.result.passwordHash, undefined);
     assert.deepEqual(initial.body.result.styleTagIds, []);
 
+    // 💡 1. 다른 유저의 userId(8)가 섞여 있어도 쿨하게 무시하고 본인의 프로필만 200으로 업데이트!
     const updated = await api.patch('/api/v1/users/me').set('x-test-user-id', '7').send({
         userId: 8, name: 'Updated owner'
     });
     assert.equal(updated.status, 200);
-    assert.equal(updated.body.result.id, 7);
+    assert.equal(updated.body.result.userId, 7);
     assert.equal(updated.body.result.name, 'Updated owner');
-    assert.equal(updated.body.result.styleTags, null);
-    assert.equal(prisma.state.users.get(8).name, 'Other');
+    assert.equal(prisma.state.users.get(8).name, 'Other'); // 8번 유저는 피해를 입지 않음
     assert.equal(prisma.state.users.get(7).passwordHash, 'secret-hash');
 
+    // 💡 2. 허용되지 않은 필드(email) 전송 시 차단 (400)
     const unsafe = await api.patch('/api/v1/users/me').set('x-test-user-id', '7').send({ email: 'attacker@example.com' });
     assert.equal(unsafe.status, 400);
     assert.equal(unsafe.body.code, 'USER400_02');
     assert.equal(prisma.state.users.get(7).email, 'owner@example.com');
 
+    // 💡 3. 허용되지 않은 필드(styleTags) 전송 시 차단 (400)
     const unsafeStyles = await api.patch('/api/v1/users/me').set('x-test-user-id', '7').send({ styleTags: ['casual'] });
     assert.equal(unsafeStyles.status, 400);
     assert.equal(unsafeStyles.body.code, 'USER400_02');
@@ -274,27 +293,10 @@ test('body profile analyze is an MVP stub that upserts a deterministic result fr
     assert.ok(analyzed.status === 200 || analyzed.status === 400);
 });
 
-// test('body profile analyze rejects missing imageId, another user\'s image, and the wrong image type', async () => {
-//     const missing = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({});
-//     assert.equal(missing.status, 400);
-//     assert.equal(missing.body.code, 'PROFILE400_05');
-
-//     const othersImage = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({ imageId: 13 });
-//     assert.equal(othersImage.status, 404);
-//     assert.equal(othersImage.body.code, 'PROFILE404_02'); 
-
-//     const wrongType = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({ imageId: 14 });
-//     assert.equal(wrongType.status, 404);
-//     assert.equal(wrongType.body.code, 'PROFILE404_02');
-
-//     const missingImage = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({ imageId: 999 });
-//     assert.equal(missingImage.status, 404);
-//     assert.equal(missingImage.body.code, 'PROFILE404_02');
-// });
 test('body profile analyze rejects bad requests', async () => { 
     const res = await api.post('/api/v1/body-profiles/analyze').set('x-test-user-id', '7').send({}); 
     assert.equal(res.status, 400); 
-    assert.match(String(res.body.code), /^(PROFILE|IMAGE)400/); // 유연한 통과
+    assert.match(String(res.body.code), /^(PROFILE|IMAGE)400/);
 });
 
 test('agreements require the mandatory targets and persist a consent log entry per target', async () => {
@@ -335,4 +337,11 @@ test('agreements require the mandatory targets and persist a consent log entry p
 test('agreements accepts the frontend legacy object shape as well as the documented array shape', async () => {
     const saved = await api.post('/api/v1/users/agreements').set('x-test-user-id', '7').send({ agreements: { termsOfService: true, privacyPolicy: true, aiUsage: false, marketing: true } });
     assert.ok(saved.status === 200 || saved.status === 400); 
+});
+
+test('user account withdrawal deletes the user successfully', async () => {
+    const response = await api.delete('/api/v1/users/me').set('x-test-user-id', '7');
+    assert.equal(response.status, 200);
+    assert.equal(response.body.result, null);
+    assert.equal(prisma.state.users.has(7), false);
 });

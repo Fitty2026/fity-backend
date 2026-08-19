@@ -32,6 +32,15 @@ class MemoryAuthRepository {
         this.initialPuzzleBalances.set(user.id, initialPuzzleBalance);
         return user;
     }
+
+    async updatePassword(userId, passwordHash) {
+        for (const user of this.users.values()) {
+            if (user.id === userId) {
+                user.passwordHash = passwordHash;
+                return user;
+            }
+        }
+    }
 }
 
 const TEST_SECRET = 'test-jwt-secret-that-is-longer-than-32-characters';
@@ -64,7 +73,6 @@ describe('BE1 auth API', () => {
             name: ' Fitty '
         });
 
-
         assert.equal(response.status, 200);
         assert.equal(response.body.result.userId, 1);
         assert.equal(response.body.result.loginId, 'fitty1234');
@@ -93,7 +101,6 @@ describe('BE1 auth API', () => {
             email: 'other@example.com'
         });
         assert.equal(duplicateUsername.status, 400);
-
     });
 
     it('requires all four Figma signup fields', async () => {
@@ -123,7 +130,7 @@ describe('BE1 auth API', () => {
         const invalidLoginIds = ['abc', 'a'.repeat(21), '한글아이디', 'fitty_user'];
 
         for (const loginId of invalidLoginIds) {
-            const response = await request(app).post('/api/v1/auth/signup').send({ ...payload, loginId });
+            await request(app).post('/api/v1/auth/signup').send({ ...payload, loginId });
         }
 
         const invalidName = await request(app).post('/api/v1/auth/signup').send({ ...payload, name: '   ' });

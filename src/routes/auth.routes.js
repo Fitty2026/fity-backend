@@ -8,6 +8,9 @@ export const createAuthRouter = ({ authService }) => {
     router.post('/signup', controller.signup);
     router.post('/login', controller.login);
     router.post('/logout', controller.logout);
-    router.post('/social', controller.socialLogin);
+    router.post('/social/:provider', controller.socialLogin);
+    router.post('/password/code-request', controller.requestPasswordResetCode);
+    router.post('/password/code-verify', controller.verifyPasswordResetCode);
+    router.patch('/password/reset', controller.resetPassword);
     return router;
 };
