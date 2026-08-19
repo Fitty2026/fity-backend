@@ -61,6 +61,9 @@ const onboardingStyleIds = (payload) => {
 
 const getBodyTypeDetails = (bodyType) => {
     switch (bodyType) {
+        // 초기 온보딩과 일부 기존 데이터는 세부 유형이 아닌 3개 기본 유형을 저장한다.
+        // 조회 API에서는 두 형식 모두 설명을 반환해야 화면 진입이 끊기지 않는다.
+        case 'STRAIGHT':
         case 'SLIM_STRAIGHT':
             return {
                 bodyTypeName: '슬림 스트레이트',
@@ -80,6 +83,7 @@ const getBodyTypeDetails = (bodyType) => {
                 celebrities: ['지수', '신세경', '안효섭']
             };
 
+        case 'WAVE':
         case 'SLIM_WAVE':
             return {
                 bodyTypeName: '슬림 웨이브',
@@ -99,6 +103,7 @@ const getBodyTypeDetails = (bodyType) => {
                 celebrities: ['윤아', '수지', '임시완']
             };
 
+        case 'NATURAL':
         case 'SLIM_NATURAL':
             return {
                 bodyTypeName: '슬림 내추럴',

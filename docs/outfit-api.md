@@ -114,7 +114,7 @@ FE 권장 polling 주기는 2초입니다. `completed`, `failed`, `expired`에�
 
 `GET /api/v1/outfits/generation-jobs/active`
 
-진행 중 작업이 있으면 OUTFIT-01과 같은 입력 snapshot을 포함해 반환합니다. 없으면 `COMMON200`의 `result: null`을 반환합니다.
+진행 중 작업이 있으면 OUTFIT-01과 같은 입력 snapshot을 포함해 반환합니다. 진행 중 작업이 없더라도, 저장하지 않은 완료 결과가 24시간 이내라면 마지막 완료 job을 반환해 새로고침 후 결과 화면으로 이어갈 수 있습니다. 둘 다 없으면 `COMMON200`의 `result: null`을 반환합니다.
 
 ## OUTFIT-04 아이템 교체 및 재생성
 

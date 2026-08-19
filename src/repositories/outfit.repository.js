@@ -154,6 +154,19 @@ export class OutfitRepository {
         });
     }
 
+    findLatestResumableJob(userId, completedAfter) {
+        return this.prisma.outfitGenerationJob.findFirst({
+            where: {
+                userId,
+                status: 'COMPLETED',
+                completedAt: { gt: completedAfter },
+                result: { savedOutfits: { none: {} } }
+            },
+            orderBy: { completedAt: 'desc' },
+            include: { result: { include: { savedOutfits: { select: { id: true } } } } }
+        });
+    }
+
     async listQueuedJobIds(limit = 5, now = new Date()) {
         const jobs = await this.prisma.outfitGenerationJob.findMany({
             where: { status: 'QUEUED', expiresAt: { gt: now } },
