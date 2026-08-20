@@ -57,7 +57,6 @@ model User {
   outfitResults        OutfitResult[]
   savedOutfits         SavedOutfit[]
   outfitRevisions      OutfitRevision[]
-  userSelectedBodyType   String?   @map("selected_body_type") @db.VarChar(60)
   bodyProfile          BodyProfile?
   stylePreferences     UserStylePreference[]
   bodyAnalysisSessions BodyAnalysisSession[]

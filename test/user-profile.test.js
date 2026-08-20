@@ -255,58 +255,37 @@ test('onboarding style rolls back replacement when preference creation fails', a
     assert.deepEqual(prisma.state.stylePreferences.get(7), [1, 3]);
 });
 
-test('body profile type ignores a body userId', async () => {
-    const res = await api.post('/api/v1/body-profiles/type').set('x-test-user-id', '7').send({ bodyType: 'STRAIGHT' });
-    assert.equal(res.status, 200);
-    assert.equal(res.body.result, null); 
-    
-    const updatedUser = prisma.state.users.get(7);
-    assert.ok(updatedUser); 
-    assert.equal(updatedUser.userSelectedBodyType, 'STRAIGHT');
-});
-
-test('body profile type rejects missing or invalid enum values', async () => {
-    const missing = await api.post('/api/v1/body-profiles/type').set('x-test-user-id', '7').send({
-        bodyBalance: 'BALANCED', shoulderWidth: 'AVERAGE'
-    });
-    assert.equal(missing.status, 400);
-    assert.equal(missing.body.code, 'PROFILE400_01');
-
-    const invalid = await api.post('/api/v1/body-profiles/type').set('x-test-user-id', '7').send({
-        bodyBalance: 'BALANCED', shoulderWidth: 'AVERAGE', frameSize: 'HUGE'
-    });
-    assert.equal(invalid.status, 400);
-    assert.equal(invalid.body.code, 'PROFILE400_01');
-});
-
 test('body profile lookup 404s when nothing was saved', async () => {
     const response = await api.get('/api/v1/body-profiles/me').set('x-test-user-id', '7');
     assert.equal(response.status, 404);
     assert.equal(response.body.code, 'PROFILE404_01');
 });
 
-test('body profile lookup supports the three base onboarding body types', async () => {
+test('body profile lookup supports the stored body profiles', async () => {
     prisma.state.bodyProfiles.set(7, {
         id: 1,
         userId: 7,
+        analysisId: 1024,
         bodyType: 'WAVE',
         bodyBalance: 'BALANCED',
         shoulderWidth: 'AVERAGE',
         frameSize: 'MEDIUM',
-        shoulderWidthCm: null,
-        chestCircumference: null,
-        waistCircumference: null,
-        hipCircumference: null,
-        upperBodyLength: null,
-        lowerBodyLength: null,
-        legLength: null,
-        upperBodyRatio: null,
-        lowerBodyRatio: null,
+        shoulderWidthCm: 38.0,
+        chestCircumference: 85.0,
+        waistCircumference: 67.0,
+        hipCircumference: 92.0,
+        upperBodyLength: 61.0,
+        lowerBodyLength: 61.0,
+        legLength: 61.0,
+        upperBodyRatio: 47,
+        lowerBodyRatio: 53,
         updatedAt: new Date().toISOString()
     });
 
     const response = await api.get('/api/v1/body-profiles/me').set('x-test-user-id', '7');
     assert.equal(response.status, 200);
+    assert.equal(response.body.result.bodyProfileId, 1);
+    assert.equal(response.body.result.userSelectedBodyType, undefined);
     assert.equal(response.body.result.bodyTypeResult.bodyTypeName, '슬림 웨이브');
 });
 
