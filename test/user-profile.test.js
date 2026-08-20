@@ -177,23 +177,20 @@ test('user profile reads and updates only the authenticated user with an allowli
     assert.equal(initial.body.result.passwordHash, undefined);
     assert.deepEqual(initial.body.result.styleTagIds, []);
 
-    // 💡 1. 다른 유저의 userId(8)가 섞여 있어도 쿨하게 무시하고 본인의 프로필만 200으로 업데이트!
     const updated = await api.patch('/api/v1/users/me').set('x-test-user-id', '7').send({
         userId: 8, name: 'Updated owner'
     });
     assert.equal(updated.status, 200);
     assert.equal(updated.body.result.userId, 7);
     assert.equal(updated.body.result.name, 'Updated owner');
-    assert.equal(prisma.state.users.get(8).name, 'Other'); // 8번 유저는 피해를 입지 않음
+    assert.equal(prisma.state.users.get(8).name, 'Other'); 
     assert.equal(prisma.state.users.get(7).passwordHash, 'secret-hash');
 
-    // 💡 2. 허용되지 않은 필드(email) 전송 시 차단 (400)
     const unsafe = await api.patch('/api/v1/users/me').set('x-test-user-id', '7').send({ email: 'attacker@example.com' });
     assert.equal(unsafe.status, 400);
     assert.equal(unsafe.body.code, 'USER400_02');
     assert.equal(prisma.state.users.get(7).email, 'owner@example.com');
 
-    // 💡 3. 허용되지 않은 필드(styleTags) 전송 시 차단 (400)
     const unsafeStyles = await api.patch('/api/v1/users/me').set('x-test-user-id', '7').send({ styleTags: ['casual'] });
     assert.equal(unsafeStyles.status, 400);
     assert.equal(unsafeStyles.body.code, 'USER400_02');
@@ -364,9 +361,15 @@ test('agreements accepts the frontend legacy object shape as well as the documen
     assert.ok(saved.status === 200 || saved.status === 400); 
 });
 
-test('user account withdrawal deletes the user successfully', async () => {
+test('user account withdrawal soft-deletes the user successfully', async () => {
     const response = await api.delete('/api/v1/users/me').set('x-test-user-id', '7');
     assert.equal(response.status, 200);
     assert.equal(response.body.result, null);
-    assert.equal(prisma.state.users.has(7), false);
+    
+    assert.equal(prisma.state.users.has(7), true);
+    
+    const deletedUser = prisma.state.users.get(7);
+    assert.notEqual(deletedUser.deletedAt, null);
+    assert.notEqual(deletedUser.deletedAt, undefined);
+    assert.equal(deletedUser.name, '탈퇴한 회원');
 });

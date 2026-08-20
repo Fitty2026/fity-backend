@@ -455,11 +455,9 @@ export class UserProfileService {
     }
 
     async updateProfile(userId, payload) {
-        // 1. 전체 허용 필드 정의
         const allowedFields = ['name', 'profileImageUrl', 'styleTagIds', 'userId'];
         const keys = Object.keys(payload || {});
 
-        // 2. 허용되지 않은 필드(email 등)가 포함되어 있거나, 아예 수정 가능한 필드가 하나도 안 들어온 경우
         const hasInvalidField = keys.some((key) => !allowedFields.includes(key));
         const hasUpdatableField = keys.some((key) => ['name', 'profileImageUrl', 'styleTagIds'].includes(key));
 
@@ -468,14 +466,12 @@ export class UserProfileService {
         }
 
         const { name, profileImageUrl, styleTagIds } = payload;
-        // ... (이하 기존 로직 동일)
 
         const user = await this.client.user.findUnique({ where: { id: userId } });
         if (!user) {
             throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
         }
 
-        // 2. 닉네임(name) 형식 검증
         if (name !== undefined) {
             if (name !== null && (typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 191)) {
                 throw problem(400, 'USER400_01', '이미 사용 중이거나 올바르지 않은 닉네임 형식입니다.');
@@ -542,19 +538,38 @@ export class UserProfileService {
             throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
         }
 
-        // 실제 DB 환경과 테스트 환경(Map 기반) 모두 에러 없이 삭제되도록 처리
-        if (this.client.user?.delete) {
+        if (user.deletedAt) {
+            throw problem(400, 'USER400_01', '이미 탈퇴 처리된 회원입니다.');
+        }
+
+        if (this.client.user?.update) {
             try {
-                await this.client.user.delete({ where: { id: userId } });
+                await this.client.user.update({
+                    where: { id: userId },
+                    data: {
+                        deletedAt: new Date(), 
+                        username: `deleted_${userId}_${Date.now()}`,
+                        email: `deleted_${userId}_${Date.now()}@fitty.com`,
+                        name: '탈퇴한 회원',
+                        profileImageUrl: null, 
+                        passwordHash: null,
+                    }
+                });
             } catch (e) {
                 if (this.client.state?.users) {
-                    this.client.state.users.delete(userId);
+                    const targetUser = this.client.state.users.get(userId);
+                    if (targetUser) {
+                        this.client.state.users.set(userId, { ...targetUser, deletedAt: new Date() });
+                    }
                 } else {
                     throw e;
                 }
             }
         } else if (this.client.state?.users) {
-            this.client.state.users.delete(userId);
+            const targetUser = this.client.state.users.get(userId);
+            if (targetUser) {
+                this.client.state.users.set(userId, { ...targetUser, deletedAt: new Date() });
+            }
         }
 
         return null;
