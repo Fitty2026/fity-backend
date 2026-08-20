@@ -13,7 +13,8 @@ class MemoryOutfitRepository {
         this.items = new Map([[1, [
             { id: 4, imageId: 14, name: 'shirt', size: 'M', category: 'TOP', importType: 'MANUAL', tags: [{ tagName: 'white' }], imageAsset: { id: 14, mimeType: 'image/png' } },
             { id: 5, imageId: 15, name: 'jacket', size: 'M', category: 'TOP', importType: 'MANUAL', tags: [{ tagName: 'navy' }], imageAsset: { id: 15, mimeType: 'image/png' } },
-            { id: 6, imageId: 16, name: 'pants', size: 'M', category: 'BOTTOM', importType: 'MANUAL', tags: [{ tagName: 'black' }], imageAsset: { id: 16, mimeType: 'image/png' } }
+            { id: 6, imageId: 16, name: 'pants', size: 'M', category: 'BOTTOM', importType: 'MANUAL', tags: [{ tagName: 'black' }], imageAsset: { id: 16, mimeType: 'image/png' } },
+            { id: 7, imageId: 17, name: 'shoes', size: 'M', category: 'SHOES', importType: 'MANUAL', tags: [{ tagName: 'black' }], imageAsset: { id: 17, mimeType: 'image/png' } }
         ]]]);
         this.bodyProfiles = new Map([[1, { id: 7, bodyBalance: 'BALANCED', shoulderWidth: 'AVERAGE', frameSize: 'MEDIUM' }]]);
         this.styleTags = new Map([[1, new Set([2])]]);
@@ -114,7 +115,7 @@ describe('OutfitService', () => {
         assert.equal(repository.jobs.length, 1);
         assert.equal(repository.jobs[0].inputSnapshot.bodyProfile.bodyBalance, 'BALANCED');
         assert.deepEqual(repository.jobs[0].inputSnapshot.selectedItems.map((item) => item.itemId), [4]);
-        assert.deepEqual(repository.jobs[0].inputSnapshot.closetItemPool.map((item) => item.itemId), [4, 5, 6]);
+        assert.deepEqual(repository.jobs[0].inputSnapshot.closetItemPool.map((item) => item.itemId), [4, 5, 6, 7]);
         assert.equal(repository.jobs[0].inputSnapshot.selectedItems[0].imageRef.contentPath, '/api/v1/images/14/content');
     });
     it('uses stored style preferences when styleTagIds is omitted', async () => {
@@ -178,8 +179,17 @@ describe('OutfitService', () => {
     });
     it('accepts exactly three closet items', async () => {
         const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
-        const created = await service.createGenerationJob(1, { closetItemIds: [4, 5, 6] });
-        assert.deepEqual(created.input.closetItemIds, [4, 5, 6]);
+        const created = await service.createGenerationJob(1, { closetItemIds: [4, 6, 7] });
+        assert.deepEqual(created.input.closetItemIds, [4, 6, 7]);
+    });
+    it('allows one item per core clothing category only', async () => {
+        const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
+        await assert.rejects(
+            () => service.createGenerationJob(1, { closetItemIds: [4, 5] }),
+            { code: 'REQUEST400' }
+        );
+        const created = await service.createGenerationJob(1, { closetItemIds: [4, 6, 7] });
+        assert.deepEqual(created.input.closetItemIds, [4, 6, 7]);
     });
     it('expires a stalled active job after ten minutes', async () => {
         const repository = new MemoryOutfitRepository();
@@ -337,7 +347,7 @@ describe('OutfitService', () => {
         const revisionJob = repository.jobs.find((job) => job.id === revision.jobId);
         assert.deepEqual(revisionJob.closetItemIds, [5]);
         assert.deepEqual(revisionJob.inputSnapshot.selectedItems.map((item) => item.itemId), [5]);
-        assert.deepEqual(revisionJob.inputSnapshot.closetItemPool.map((item) => item.itemId), [4, 5, 6]);
+        assert.deepEqual(revisionJob.inputSnapshot.closetItemPool.map((item) => item.itemId), [4, 5, 6, 7]);
         await service.processGenerationJob(revision.jobId);
         await assert.rejects(() => service.createRevision(1, resultId, { replaceItemId: 4, newItemId: 6 }), { code: 'ITEM_NOT_COMPATIBLE' });
     });
