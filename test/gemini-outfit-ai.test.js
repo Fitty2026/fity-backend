@@ -40,23 +40,23 @@ describe('GeminiOutfitAiAdapter', () => {
         const adapter = new GeminiOutfitAiAdapter({
             apiKey: 'test-key',
             model: 'gemini-test-image',
-            endpoint: 'https://gemini.test/interactions',
+            endpoint: 'https://gemini.test/models/gemini-test-image:generateContent',
             imageService,
             fetchImpl: async (url, options) => {
                 request = { url, options, body: JSON.parse(options.body) };
                 return new Response(JSON.stringify({
-                    output_image: { mime_type: 'image/png', data: Buffer.from('generated-image').toString('base64') }
+                    candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: Buffer.from('generated-image').toString('base64') } }] } }]
                 }), { status: 200 });
             }
         });
 
         const result = await adapter.generate({ userId: 1, inputSnapshot: snapshot });
 
-        assert.equal(request.url, 'https://gemini.test/interactions');
+        assert.equal(request.url, 'https://gemini.test/models/gemini-test-image:generateContent');
         assert.equal(request.options.headers['x-goog-api-key'], 'test-key');
-        assert.equal(request.body.model, 'gemini-test-image');
-        assert.equal(request.body.response_format.mime_type, 'image/jpeg');
-        assert.equal(request.body.input.filter((part) => part.type === 'image').length, 2);
+        assert.deepEqual(request.body.generationConfig.responseModalities, ['IMAGE']);
+        assert.equal(request.body.generationConfig.imageConfig.aspectRatio, '3:4');
+        assert.equal(request.body.contents[0].parts.filter((part) => part.inlineData).length, 2);
         assert.deepEqual(imageService.reads, [{ imageId: 14, ownerUserId: 1 }, { imageId: 16, ownerUserId: 1 }]);
         assert.equal(imageService.writes[0].ownerUserId, 1);
         assert.equal(imageService.writes[0].file.buffer.toString(), 'generated-image');
@@ -67,17 +67,20 @@ describe('GeminiOutfitAiAdapter', () => {
         assert.equal(result.fallbackUsed, false);
     });
 
-    it('accepts an image from the model output steps response', async () => {
+    it('uses the model endpoint derived from the configured model by default', async () => {
+        let requestUrl;
         const adapter = new GeminiOutfitAiAdapter({
             apiKey: 'test-key', imageService: createImageService(),
-            fetchImpl: async () => new Response(JSON.stringify({
-                steps: [{ type: 'model_output', content: [
-                    { type: 'text', text: 'done' },
-                    { type: 'image', mime_type: 'image/jpeg', data: Buffer.from('jpeg-output').toString('base64') }
-                ] }]
-            }), { status: 200 })
+            model: 'gemini-test-image',
+            fetchImpl: async (url) => {
+                requestUrl = url;
+                return new Response(JSON.stringify({
+                    candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/jpeg', data: Buffer.from('jpeg-output').toString('base64') } }] } }]
+                }), { status: 200 });
+            }
         });
         const result = await adapter.generate({ userId: 1, inputSnapshot: snapshot });
+        assert.equal(requestUrl, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-test-image:generateContent');
         assert.equal(result.provider, 'google-gemini');
     });
 
@@ -93,7 +96,7 @@ describe('GeminiOutfitAiAdapter', () => {
         await assert.rejects(
             () => new GeminiOutfitAiAdapter({
                 apiKey: 'key', imageService: createImageService(),
-                fetchImpl: async () => new Response(JSON.stringify({ output_text: 'no image' }), { status: 200 })
+                fetchImpl: async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'no image' }] } }] }), { status: 200 })
             }).generate({ userId: 1, inputSnapshot: snapshot }),
             { code: 'AI_INVALID_RESPONSE' }
         );

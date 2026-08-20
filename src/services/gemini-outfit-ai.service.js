@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 
-const DEFAULT_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+const DEFAULT_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-3.1-flash-image';
 const DEFAULT_TIMEOUT_MS = 120000;
 const MAX_OUTPUT_BYTES = 20 * 1024 * 1024;
@@ -61,10 +61,8 @@ const promptFor = (snapshot, items) => {
 };
 
 const findOutputImage = (data) => {
-    if (data?.output_image?.data) return data.output_image;
-    for (const step of data?.steps ?? []) {
-        if (step?.type !== 'model_output') continue;
-        const image = step.content?.find((block) => block?.type === 'image' && block.data);
+    for (const candidate of data?.candidates ?? []) {
+        const image = candidate?.content?.parts?.find((part) => part?.inlineData?.data)?.inlineData;
         if (image) return image;
     }
     return null;
@@ -101,14 +99,14 @@ export class GeminiOutfitAiAdapter {
     constructor({
         apiKey = process.env.GEMINI_API_KEY,
         model = process.env.GEMINI_IMAGE_MODEL || DEFAULT_MODEL,
-        endpoint = process.env.GEMINI_IMAGE_API_URL || DEFAULT_ENDPOINT,
+        endpoint = process.env.GEMINI_IMAGE_API_URL,
         timeoutMs = positiveTimeout(process.env.GEMINI_IMAGE_TIMEOUT_MS),
         fetchImpl = globalThis.fetch,
         imageService
     } = {}) {
         this.apiKey = apiKey;
         this.model = model;
-        this.endpoint = endpoint;
+        this.endpoint = endpoint || `${DEFAULT_API_BASE_URL}/models/${this.model}:generateContent`;
         this.timeoutMs = positiveTimeout(timeoutMs);
         this.fetch = fetchImpl;
         this.imageService = imageService;
@@ -127,14 +125,14 @@ export class GeminiOutfitAiAdapter {
         const items = chooseOutfitItems(inputSnapshot);
         if (items.length === 0) throw adapterError('AI_INVALID_INPUT', 'No usable closet image was provided.');
 
-        const inputs = [{ type: 'text', text: promptFor(inputSnapshot, items) }];
+        const parts = [{ text: promptFor(inputSnapshot, items) }];
         for (const item of items) {
             const content = await this.imageService.getImageContent({
                 imageId: item.imageRef.assetId,
                 ownerUserId: userId
             });
             const { buffer, mimeType } = await normalizeInputImage(content);
-            inputs.push({ type: 'image', mime_type: mimeType, data: buffer.toString('base64') });
+            parts.push({ inlineData: { mimeType, data: buffer.toString('base64') } });
         }
 
         const controller = new AbortController();
@@ -145,9 +143,11 @@ export class GeminiOutfitAiAdapter {
                 headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
                 signal: controller.signal,
                 body: JSON.stringify({
-                    model: this.model,
-                    input: inputs,
-                    response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: '3:4', image_size: '1K' }
+                    contents: [{ role: 'user', parts }],
+                    generationConfig: {
+                        responseModalities: ['IMAGE'],
+                        imageConfig: { aspectRatio: '3:4', imageSize: '1K' }
+                    }
                 })
             });
             if (!response.ok) throw adapterError('AI_UNAVAILABLE', `Gemini returned ${response.status}.`);
