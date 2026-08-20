@@ -73,6 +73,19 @@ const normalizeWeather = (value) => {
     return { condition, ...(value.temperature == null ? {} : { temperature: value.temperature }) };
 };
 
+const assertSingleItemPerCoreCategory = (items) => {
+    const coreCategories = new Set(['TOP', 'BOTTOM', 'SHOES']);
+    const selectedCategories = new Set();
+
+    for (const item of items) {
+        if (!coreCategories.has(item.category)) continue;
+        if (selectedCategories.has(item.category)) {
+            throw httpError(400, 'REQUEST400', `${item.category} can contain only one selected item.`);
+        }
+        selectedCategories.add(item.category);
+    }
+};
+
 const normalizeText = (value, fallback, maxLength, field = 'text') => {
     if (value == null || value === '') return fallback;
     if (typeof value !== 'string') throw httpError(400, 'REQUEST400', 'Text fields must be strings.');
@@ -316,6 +329,7 @@ export class OutfitService {
         if (context.selectedItems.length !== closetItemIds.length) {
             throw httpError(403, 'FORBIDDEN403', 'Closet item is not active or its image is unavailable.');
         }
+        assertSingleItemPerCoreCategory(context.selectedItems);
         if (context.stylePreferences.length !== styleTagIds.length) {
             throw httpError(404, 'NOT_FOUND404', 'Style preference was not found.');
         }
