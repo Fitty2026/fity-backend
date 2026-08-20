@@ -20,22 +20,25 @@ import { PuzzleService } from './services/puzzle.service.js';
 import { GeminiOutfitAiAdapter } from './services/gemini-outfit-ai.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
+import { DemoClosetService } from './services/demo-closet.service.js';
 import { UserProfileService } from './services/user-profile.service.js';
 import { ReceiptService } from './services/receipt.service.js';
 import { ImageUrlSigner } from './services/image-url-signer.js';
 
 const imageUrlSigner = new ImageUrlSigner();
 
-const createDefaultImageService = () => {
+const createDefaultImageStorage = () => new LocalImageStorage({
+    rootDirectory: process.env.IMAGE_STORAGE_ROOT || path.resolve('var/images')
+});
+
+const createDefaultImageService = (storage = createDefaultImageStorage()) => {
     const repository = new ImageRepository(getPrisma);
-    const storage = new LocalImageStorage({
-        rootDirectory: process.env.IMAGE_STORAGE_ROOT || path.resolve('var/images')
-    });
     return new ImageService({ repository, storage, urlSigner: imageUrlSigner, storageProvider: 'local' });
 };
 
-const createDefaultAuthService = () => new AuthService({
-    repository: new AuthRepository(getPrisma)
+const createDefaultAuthService = (storage = createDefaultImageStorage()) => new AuthService({
+    repository: new AuthRepository(getPrisma),
+    demoClosetService: new DemoClosetService({ getPrisma, storage })
 });
 
 const defaultHealthCheck = async () => {
@@ -80,8 +83,9 @@ export const createCorsOptions = (configuredOrigins = process.env.CORS_ALLOWED_O
 };
 
 export const createApp = ({
-    imageService = createDefaultImageService(),
-    authService = createDefaultAuthService(),
+    imageStorage = createDefaultImageStorage(),
+    imageService = createDefaultImageService(imageStorage),
+    authService = createDefaultAuthService(imageStorage),
     closetService = createDefaultClosetService(),
     userProfileService = createDefaultUserProfileService(),
     outfitService = createDefaultOutfitService(imageService),

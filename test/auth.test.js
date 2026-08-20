@@ -84,6 +84,26 @@ describe('BE1 auth API', () => {
         assert.equal(repository.initialPuzzleBalances.get(1), 100);
     });
 
+    it('seeds the configured demo closet after signup', async () => {
+        const seededUserIds = [];
+        const service = new AuthService({
+            repository,
+            demoClosetService: {
+                isEnabled: () => true,
+                seedForUser: async (userId) => seededUserIds.push(userId)
+            }
+        });
+
+        const result = await service.signup({
+            loginId: 'democloset',
+            email: 'demo-closet@example.com',
+            password: VALID_PW,
+            name: 'Demo Closet'
+        });
+
+        assert.deepEqual(seededUserIds, [result.userId]);
+    });
+
     it('rejects duplicate signup and invalid credential input', async () => {
         const payload = {
             loginId: 'fitty1234',
