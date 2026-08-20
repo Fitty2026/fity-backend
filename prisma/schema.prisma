@@ -48,6 +48,7 @@ model User {
   styleTags            Json?                 @map("style_tags")
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
+  deletedAt            DateTime?             @map("deleted_at")
   images               ImageAsset[]
   closetItems          ClosetItem[]
   consentLogs          ConsentLog[]
