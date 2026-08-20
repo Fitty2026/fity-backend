@@ -101,7 +101,7 @@ export class DemoClosetService {
             throw new Error('DEMO_CLOSET_SOURCE_USER_ID must be configured.');
         }
         const users = await this.getPrisma().user.findMany({
-            where: { deletedAt: null, id: { not: this.sourceUserId } },
+            where: { id: { not: this.sourceUserId } },
             select: { id: true }
         });
         const results = [];
