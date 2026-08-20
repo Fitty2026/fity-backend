@@ -77,7 +77,16 @@ export class OutfitRepository {
     async findOwnedClosetItems(userId, closetItemIds) {
         return this.prisma.closetItem.findMany({
             where: { userId, id: { in: closetItemIds }, deletedAt: null },
-            select: { id: true, category: true }
+            select: {
+                id: true,
+                name: true,
+                brand: true,
+                category: true,
+                colorText: true,
+                colorHex: true,
+                imageId: true,
+                imageAsset: { select: { id: true } }
+            }
         });
     }
 

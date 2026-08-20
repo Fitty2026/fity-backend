@@ -280,7 +280,17 @@ describe('OutfitService', () => {
         const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
         const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
         const saved = await service.saveOutfit(1, { outfitResultId: resultId, name: 'daily', tags: ['date'], memo: 'memo' });
-        assert.deepEqual(saved.items, [4]);
+        assert.deepEqual(saved.items, [{
+            id: 4,
+            itemId: 4,
+            name: 'shirt',
+            brand: null,
+            category: 'TOP',
+            colorText: null,
+            colorHex: null,
+            imageUrl: '/api/v1/images/14/content'
+        }]);
+        assert.deepEqual(saved.itemIds, [4]);
         const deleted = await service.deleteSavedOutfit(1, saved.id);
         assert.equal(deleted.savedOutfitId, saved.id);
         assert.ok(deleted.deletedAt instanceof Date);
