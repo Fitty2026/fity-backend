@@ -96,7 +96,9 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
             tags: ['work'],
             memo: 'Persisted through Prisma'
         });
-        assert.equal(saved.items[0], closetItem.id);
+        assert.equal(saved.items[0].itemId, closetItem.id);
+        assert.equal(saved.items[0].name, 'Integration shirt');
+        assert.equal(saved.items[0].category, 'TOP');
 
         await service.deleteSavedOutfit(owner.id, saved.id);
         assert.equal((await service.getDeletedSavedOutfits(owner.id, {})).pagination.totalCount, 1);
