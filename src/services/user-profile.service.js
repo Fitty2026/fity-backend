@@ -3,15 +3,9 @@ import { analyzeWithGemini } from '../utils/gemini.util.js';
 
 const problem = (status, code, message) => Object.assign(new Error(message), { status, code });
 const USER_FIELDS = new Set(['name']);
-const BODY_FIELDS = new Set(['bodyBalance', 'shoulderWidth', 'frameSize']);
-const BODY_BALANCE_VALUES = new Set(['UPPER_BODY_DEVELOPED', 'BALANCED', 'LOWER_BODY_DEVELOPED']);
-const SHOULDER_WIDTH_VALUES = new Set(['NARROW', 'AVERAGE', 'WIDE']);
-const FRAME_SIZE_VALUES = new Set(['SMALL', 'MEDIUM', 'LARGE']);
 const REQUIRED_AGREEMENT_TARGETS = new Set(['TERMS_OF_SERVICE', 'PRIVACY_POLICY']);
 const OPTIONAL_AGREEMENT_TARGETS = new Set(['MARKETING', 'AI_USAGE']);
 const AGREEMENT_TARGETS = new Set([...REQUIRED_AGREEMENT_TARGETS, ...OPTIONAL_AGREEMENT_TARGETS]);
-
-const ALLOWED_BODY_TYPES = new Set(['STRAIGHT', 'WAVE', 'NATURAL']);
 
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
@@ -61,8 +55,6 @@ const onboardingStyleIds = (payload) => {
 
 const getBodyTypeDetails = (bodyType) => {
     switch (bodyType) {
-        // 초기 온보딩과 일부 기존 데이터는 세부 유형이 아닌 3개 기본 유형을 저장한다.
-        // 조회 API에서는 두 형식 모두 설명을 반환해야 화면 진입이 끊기지 않는다.
         case 'STRAIGHT':
         case 'SLIM_STRAIGHT':
             return {
@@ -211,18 +203,6 @@ const agreementInput = (payload) => {
     return agreements;
 };
 
-const bodyTypeOnlyData = (payload) => {
-    const keys = Object.keys(payload).filter((key) => key !== 'userId');
-    if (keys.length !== 1 || keys[0] !== 'bodyType') {
-        throw problem(400, 'PROFILE400_01', '수정할 수 없는 체형 프로필 필드가 포함되어 있습니다.');
-    }
-    const bodyType = payload.bodyType?.trim();
-    if (!bodyType || bodyType.length > 60 || !ALLOWED_BODY_TYPES.has(bodyType)) {
-        throw problem(400, 'PROFILE400_04', 'bodyType은 60자 이하 문자열 또는 null이어야 합니다.');
-    }
-    return bodyType;
-};
-
 export class UserProfileService {
     constructor({ prisma, getPrisma }) {
         this.prisma = prisma;
@@ -295,16 +275,13 @@ export class UserProfileService {
     }
 
     async getBodyProfile(userId) {
-        const user = await this.client.user.findUnique({ 
-            where: { id: userId }, 
-            select: { userSelectedBodyType: true } 
-        });
         const profile = await this.client.bodyProfile.findUnique({ where: { userId } });
         if (!profile) throw problem(404, 'PROFILE404_01', '등록된 체형 프로필이 존재하지 않습니다.');
+        
         const details = getBodyTypeDetails(profile.bodyType);
+        
         return {
             bodyProfileId: profile.id,
-            userSelectedBodyType: user?.userSelectedBodyType || "미설정",
             measurements: {
                 shoulderWidth: profile.shoulderWidthCm,
                 chestCircumference: profile.chestCircumference,
@@ -329,19 +306,9 @@ export class UserProfileService {
         };
     }
 
-    async saveBodyType(userId, payload) {
-        const bodyType = bodyTypeOnlyData(payload);
-        const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
-        if (!user) throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
-        await this.client.user.update({
-        where: { id: userId },
-        data: { userSelectedBodyType: bodyType } 
-    });
-    return null;
-}
 
     async analyzeBodyProfile(userId, files) {
-        const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true, userSelectedBodyType: true } });
+        const user = await this.client.user.findUnique({ where: { id: userId }, select: { id: true } });
         if (!user) throw problem(404, 'USER404_01', '존재하지 않는 회원입니다.');
 
         const imageFiles = files; 
@@ -349,25 +316,23 @@ export class UserProfileService {
         if (!imageFiles || imageFiles.length !== 3) {
             throw problem(400, 'PROFILE400_05', '정면, 측면, 후면 사진 총 3장을 모두 첨부해 주세요.');
         }
+        
         try {
-            // MediaPipe 관절 비율 계산
             const calculatedRatios = await extractBodyLandmarks(imageFiles[0].buffer);
 
-            // Gemini 3.1 Flash-Lite AI 엔진 호출 (순서 상관없이 사진 3장 전달)
             const aiAnalysis = await analyzeWithGemini({
                 images: imageFiles.map(file => ({ 
                     buffer: file.buffer, 
                     mimeType: file.mimetype 
                 })),
-                ratios: calculatedRatios,
-                userSelectedBodyType: user.userSelectedBodyType
+                ratios: calculatedRatios
             });
 
             const session = await this.client.bodyAnalysisSession.create({
                 data: {
                     userId: userId,
                     resultData: aiAnalysis, 
-                    expiresAt: new Date(Date.now() + 30 * 60 * 1000) // 30분 뒤 만료
+                    expiresAt: new Date(Date.now() + 30 * 60 * 1000) 
                 }
             });
             const analysisId = session.id;
