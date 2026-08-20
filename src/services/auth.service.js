@@ -90,6 +90,7 @@ export class AuthService {
     constructor({
         repository,
         jwtConfig = getJwtConfig,
+        demoClosetService = null,
         initialPuzzleBalance = Number(process.env.INITIAL_PUZZLE_BALANCE ?? DEFAULT_INITIAL_PUZZLE_BALANCE)
     }) {
         if (!Number.isSafeInteger(initialPuzzleBalance) || initialPuzzleBalance <= 0) {
@@ -97,6 +98,7 @@ export class AuthService {
         }
         this.repository = repository;
         this.jwtConfig = jwtConfig;
+        this.demoClosetService = demoClosetService;
         this.initialPuzzleBalance = initialPuzzleBalance;
     }
 
@@ -105,6 +107,14 @@ export class AuthService {
             ...data,
             initialPuzzleBalance: this.initialPuzzleBalance
         });
+    }
+
+    async createUserWithDemoCloset(data) {
+        const user = await this.createUser(data);
+        if (this.demoClosetService?.isEnabled()) {
+            await this.demoClosetService.seedForUser(user.id);
+        }
+        return user;
     }
 
     async signup(input) {
@@ -123,7 +133,7 @@ export class AuthService {
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
         let user;
         try {
-            user = await this.createUser({ username, email, passwordHash, name });
+            user = await this.createUserWithDemoCloset({ username, email, passwordHash, name });
         } catch (error) {
             if (error?.code === 'P2002') {
                 const target = uniqueConstraintTarget(error);
@@ -208,7 +218,7 @@ export class AuthService {
 
             if (!user) {
                 const dummyPasswordHash = await bcrypt.hash(Date.now().toString(), SALT_ROUNDS);
-                user = await this.createUser({
+                user = await this.createUserWithDemoCloset({
                     username: `${provider}_${Date.now()}`,
                     email: email,
                     passwordHash: dummyPasswordHash,
@@ -233,7 +243,7 @@ export class AuthService {
             const fallbackUsername = `mock_${provider}_${Date.now()}`;
             const dummyPasswordHash = await bcrypt.hash('MockPassword123!', SALT_ROUNDS);
 
-            user = await this.createUser({
+            user = await this.createUserWithDemoCloset({
                 username: fallbackUsername,
                 email: fallbackEmail,
                 passwordHash: dummyPasswordHash,
