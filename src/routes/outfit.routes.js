@@ -21,6 +21,8 @@ export const createOutfitRouter = ({ authenticate, internalToken }) => {
     router.delete('/saved/:savedOutfitId/permanent', authenticate, controller.permanentlyDeleteSavedOutfit);
     router.get('/saved/:savedOutfitId', authenticate, controller.getSavedOutfit);
     router.patch('/saved/:savedOutfitId', authenticate, controller.updateSavedOutfit);
+    router.post('/saved/:savedOutfitId/likes', authenticate, controller.likeSavedOutfit);
+    router.delete('/saved/:savedOutfitId/likes', authenticate, controller.unlikeSavedOutfit);
     router.delete('/saved/:savedOutfitId', authenticate, controller.deleteSavedOutfit);
     router.post('/internal/generation-jobs/:jobId/process', internalOnly(internalToken), controller.processGenerationJob);
     return router;

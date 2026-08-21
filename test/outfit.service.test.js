@@ -64,10 +64,11 @@ class MemoryOutfitRepository {
     async completeJob({ job, aiResult }) { const result = { id: this.next++, userId: job.userId, generationJobId: job.id, createdAt: new Date(), ...aiResult }; this.results.push(result); const target = this.jobs.find((item) => item.id === job.id); target.status = 'COMPLETED'; target.progress = 100; target.completedAt = new Date(); return result; }
     async failJob({ id, code, reason }) { const job = this.jobs.find((item) => item.id === id); job.status = 'FAILED'; job.failureCode = code; job.failureReason = reason; job.completedAt = new Date(); return { count: 1 }; }
     async findResult(userId, id) { const result = this.results.find((item) => item.id === id && item.userId === userId); return result ? { ...result, generationJob: this.jobs.find((job) => job.id === result.generationJobId) } : null; }
-    async saveResult({ userId, outfitResultId, name, tags, memo }) { if (this.saved.some((item) => item.userId === userId && item.outfitResultId === outfitResultId)) { const error = new Error('duplicate'); error.code = 'P2002'; throw error; } const now = new Date(); const saved = { id: this.next++, userId, outfitResultId, name, tags, memo, createdAt: now, updatedAt: now, deletedAt: null, outfitResult: await this.findResult(userId, outfitResultId) }; this.saved.push(saved); return saved; }
+    async saveResult({ userId, outfitResultId, name, tags, memo }) { if (this.saved.some((item) => item.userId === userId && item.outfitResultId === outfitResultId)) { const error = new Error('duplicate'); error.code = 'P2002'; throw error; } const now = new Date(); const saved = { id: this.next++, userId, outfitResultId, name, tags, memo, isLiked: false, createdAt: now, updatedAt: now, deletedAt: null, outfitResult: await this.findResult(userId, outfitResultId) }; this.saved.push(saved); return saved; }
     async listSaved(userId, skip, take, deleted = false) { const rows = this.saved.filter((item) => item.userId === userId && (deleted ? Boolean(item.deletedAt) : !item.deletedAt)).map((item) => ({ ...item, outfitResult: this.results.find((r) => r.id === item.outfitResultId) })); return [rows.slice(skip, skip + take), rows.length]; }
     async findSaved(userId, id) { return this.saved.find((item) => item.id === id && item.userId === userId && !item.deletedAt) || null; }
     async updateSaved(userId, id, data) { const item = await this.findSaved(userId, id); if (!item) return null; Object.assign(item, data, { updatedAt: new Date() }); item.outfitResult = await this.findResult(userId, item.outfitResultId); return item; }
+    async setSavedLike(userId, id, isLiked) { return this.updateSaved(userId, id, { isLiked }); }
     async softDeleteSaved(userId, id, deletedAt = new Date()) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && !saved.deletedAt); if (!item) return { count: 0 }; item.deletedAt = deletedAt; return { count: 1 }; }
     async restoreSaved(userId, id, deletedAfter) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && saved.deletedAt && saved.deletedAt > deletedAfter); if (!item) return { count: 0 }; item.deletedAt = null; return { count: 1 }; }
     async permanentDeleteSaved(userId, id) { const index = this.saved.findIndex((saved) => saved.id === id && saved.userId === userId && saved.deletedAt); if (index < 0) return { count: 0 }; this.saved.splice(index, 1); return { count: 1 }; }
@@ -327,10 +328,20 @@ describe('OutfitService', () => {
         assert.equal(updated.name, 'after');
         assert.equal(updated.outfitResultId, replacementResultId);
         assert.equal(updated.items[0].itemId, 4);
-        assert.equal(updated.isLiked, true);
+        assert.equal(updated.isLiked, false);
         assert.deepEqual((await service.getSavedOutfit(1, saved.id)).tags, ['work']);
         await assert.rejects(() => service.updateSavedOutfit(1, saved.id, { outfitResultId: 999 }), { code: 'NOT_FOUND404' });
         await assert.rejects(() => service.getSavedOutfit(2, saved.id), { code: 'NOT_FOUND404' });
+    });
+    it('sets and removes a saved outfit like for its owner only', async () => {
+        const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
+        const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
+        const saved = await service.saveOutfit(1, { outfitResultId: resultId, name: 'daily' });
+        assert.equal(saved.isLiked, false);
+        assert.equal((await service.setSavedOutfitLike(1, saved.id, true)).isLiked, true);
+        assert.equal((await service.setSavedOutfitLike(1, saved.id, false)).isLiked, false);
+        await assert.rejects(() => service.setSavedOutfitLike(2, saved.id, true), { code: 'NOT_FOUND404' });
     });
     it('enforces saved outfit name, tag, and memo limits from the API contract', async () => {
         const repository = new MemoryOutfitRepository(); const service = new OutfitService({ repository, aiAdapter: readyAdapter });
@@ -764,6 +775,12 @@ describe('Outfit HTTP auth boundary', () => {
             assert.equal(revision.body.result.parentOutfitResultId, resultId);
             assert.equal(repository.jobs.find((job) => job.id === revision.body.result.jobId).closetItemIds[0], 5);
             const saved = await service.saveOutfit(1, { outfitResultId: resultId, name: 'daily' });
+            const liked = await request(app).post(`/api/v1/outfits/saved/${saved.id}/likes`).set(auth);
+            assert.equal(liked.status, 200);
+            assert.equal(liked.body.result.isLiked, true);
+            const unliked = await request(app).delete(`/api/v1/outfits/saved/${saved.id}/likes`).set(auth);
+            assert.equal(unliked.status, 200);
+            assert.equal(unliked.body.result.isLiked, false);
             assert.equal((await request(app).delete(`/api/v1/outfits/saved/${saved.id}`).set(auth)).status, 200);
             const deleted = await request(app).get('/api/v1/outfits/saved/deleted').set(auth);
             assert.equal(deleted.body.result.pagination.totalCount, 1);

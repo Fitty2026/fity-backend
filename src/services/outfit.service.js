@@ -247,8 +247,7 @@ const toSaved = (saved, imageUrlSigner, now = new Date(), closetItems = []) => (
         ))
     } : {}),
     isSaved: true,
-    // Saved outfits are the user's liked outfits in the current MVP.
-    isLiked: true
+    isLiked: saved.isLiked
 });
 
 const pagination = ({ page = 1, size = 10 }) => {
@@ -627,6 +626,16 @@ export class OutfitService {
             if (error.code === 'P2002') throw httpError(409, 'CONFLICT409', 'Outfit result is already saved.');
             throw error;
         }
+    }
+
+    async setSavedOutfitLike(userId, rawId, isLiked) {
+        const saved = await this.repository.setSavedLike(
+            userId,
+            positiveId(rawId, 'savedOutfitId'),
+            isLiked
+        );
+        if (!saved) throw httpError(404, 'NOT_FOUND404', 'Saved outfit was not found.');
+        return await this.toSaved(saved);
     }
 
     async deleteSavedOutfit(userId, rawId) {
