@@ -86,6 +86,38 @@ const assertSingleItemPerCoreCategory = (items) => {
     }
 };
 
+const CORE_OUTFIT_CATEGORIES = ['TOP', 'BOTTOM', 'SHOES'];
+const orderedByIds = (items, ids) => {
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return ids.map((id) => byId.get(id)).filter(Boolean);
+};
+
+// The client selects a base item. The server completes the remaining slots from
+// the authenticated user's active closet so the AI always receives one outfit.
+const completeOutfitFromBaseItems = (baseItemIds, context) => {
+    const selectedItems = orderedByIds(context.selectedItems, baseItemIds);
+    if (selectedItems.length !== baseItemIds.length) {
+        throw httpError(403, 'FORBIDDEN403', 'Closet item is not active or its image is unavailable.');
+    }
+    assertSingleItemPerCoreCategory(selectedItems);
+
+    const finalItems = [...selectedItems];
+    const selectedCategories = new Set(selectedItems.map((item) => item.category));
+    for (const category of CORE_OUTFIT_CATEGORIES) {
+        if (finalItems.length === 3) break;
+        if (selectedCategories.has(category)) continue;
+        const candidate = context.closetItemPool.find((item) => item.category === category && !selectedCategories.has(item.category));
+        if (!candidate) continue;
+        finalItems.push(candidate);
+        selectedCategories.add(candidate.category);
+    }
+
+    if (finalItems.length !== 3) {
+        throw httpError(400, 'REQUEST400', 'At least three compatible active closet items are required to generate an outfit.');
+    }
+    return finalItems.map((item) => item.id);
+};
+
 const normalizeText = (value, fallback, maxLength, field = 'text') => {
     if (value == null || value === '') return fallback;
     if (typeof value !== 'string') throw httpError(400, 'REQUEST400', 'Text fields must be strings.');
@@ -148,7 +180,9 @@ const toClosetItemSnapshot = (item) => ({
     }
 });
 
-const createInputSnapshot = ({ bodyProfile, selectedItems, closetItemPool, stylePreferences }, input) => ({
+const createInputSnapshot = ({ bodyProfile, selectedItems, closetItemPool, stylePreferences }, input, baseClosetItemIds) => {
+    const orderedSelectedItems = orderedByIds(selectedItems, input.closetItemIds);
+    return ({
     schemaVersion: INPUT_SCHEMA_VERSION,
     bodyProfile: {
         id: bodyProfile.id,
@@ -157,12 +191,17 @@ const createInputSnapshot = ({ bodyProfile, selectedItems, closetItemPool, style
         frameSize: bodyProfile.frameSize ?? null
     },
     stylePreferences: stylePreferences.map(({ id, code, name }) => ({ styleTagId: id, code, name })),
-    selectedItems: selectedItems.map(toClosetItemSnapshot),
+    selectedItems: orderedSelectedItems.map(toClosetItemSnapshot),
     closetItemPool: closetItemPool.map(toClosetItemSnapshot),
+    recommendation: {
+        baseClosetItemIds,
+        recommendedClosetItemIds: orderedSelectedItems.map((item) => item.id)
+    },
     moodContext: input.situation ? { type: input.situation } : null,
     selectedDate: input.selectedDate,
     weatherContext: input.weather
-});
+    });
+};
 
 const jobInput = (job) => ({
     closetItemIds: job.closetItemIds,
@@ -317,16 +356,26 @@ export class OutfitService {
 
     async createGenerationJob(userId, input = {}, rawIdempotencyKey) {
         const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
-        const closetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { required: true, maximum: 3 });
+        const baseClosetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { required: true, maximum: 3 });
         let styleTagIds = input.styleTagIds == null ? null : normalizeIds(input.styleTagIds, 'styleTagIds');
         const situation = normalizeOptionalEnum(input.situation, 'situation', SITUATIONS);
         const selectedDate = normalizeSelectedDate(input.selectedDate);
         const weather = normalizeWeather(input.weather);
-        const existing = idempotencyKey
-            ? await this.repository.findJobByIdempotencyKey(userId, idempotencyKey)
-            : null;
+        const existing = idempotencyKey ? await this.repository.findJobByIdempotencyKey(userId, idempotencyKey) : null;
         if (existing && styleTagIds === null) styleTagIds = existing.styleTagIds;
         if (styleTagIds === null) styleTagIds = await this.repository.findOwnedStyleTagIds(userId, null);
+        const ownedItemIds = await this.repository.findOwnedClosetItemIds(userId, baseClosetItemIds);
+        if (ownedItemIds.length !== baseClosetItemIds.length) throw httpError(403, 'FORBIDDEN403', 'Closet item ownership check failed.');
+        if (styleTagIds.length > 0) {
+            const ownedStyleTagIds = await this.repository.findOwnedStyleTagIds(userId, styleTagIds);
+            if (ownedStyleTagIds.length !== styleTagIds.length) throw httpError(404, 'NOT_FOUND404', 'Style preference was not found.');
+        }
+        const baseContext = await this.repository.findGenerationContext(userId, baseClosetItemIds, styleTagIds);
+        if (!baseContext.bodyProfile) throw httpError(404, 'NOT_FOUND404', 'Active body profile was not found.');
+        const closetItemIds = completeOutfitFromBaseItems(baseClosetItemIds, baseContext);
+        const context = closetItemIds.length === baseClosetItemIds.length
+            ? baseContext
+            : await this.repository.findGenerationContext(userId, closetItemIds, styleTagIds);
         const normalizedInput = {
             closetItemIds,
             styleTagIds,
@@ -340,13 +389,6 @@ export class OutfitService {
             }
             return this.toJob(existing, { isExistingJob: true, includeInput: true, includeResult: false });
         }
-        const ownedItemIds = await this.repository.findOwnedClosetItemIds(userId, closetItemIds);
-        if (ownedItemIds.length !== closetItemIds.length) throw httpError(403, 'FORBIDDEN403', 'Closet item ownership check failed.');
-        if (styleTagIds.length > 0) {
-            const ownedStyleTagIds = await this.repository.findOwnedStyleTagIds(userId, styleTagIds);
-            if (ownedStyleTagIds.length !== styleTagIds.length) throw httpError(404, 'NOT_FOUND404', 'Style preference was not found.');
-        }
-        const context = await this.repository.findGenerationContext(userId, closetItemIds, styleTagIds);
         if (!context.bodyProfile) throw httpError(404, 'NOT_FOUND404', 'Active body profile was not found.');
         if (context.selectedItems.length !== closetItemIds.length) {
             throw httpError(403, 'FORBIDDEN403', 'Closet item is not active or its image is unavailable.');
@@ -355,7 +397,7 @@ export class OutfitService {
         if (context.stylePreferences.length !== styleTagIds.length) {
             throw httpError(404, 'NOT_FOUND404', 'Style preference was not found.');
         }
-        const inputSnapshot = createInputSnapshot(context, normalizedInput);
+        const inputSnapshot = createInputSnapshot(context, normalizedInput, baseClosetItemIds);
         const now = this.now();
         const jobData = {
             userId, idempotencyKey, inputSchemaVersion: INPUT_SCHEMA_VERSION,
@@ -528,6 +570,9 @@ export class OutfitService {
                 if (ownedRecommendationIds.length !== result.recommendedClosetItemIds.length) {
                     throw Object.assign(new Error('AI recommended an inaccessible closet item.'), { code: 'AI_INVALID_RECOMMENDATION' });
                 }
+                // The recommendation was finalized before AI generation. Do not let a
+                // model response replace the selected user-owned outfit afterwards.
+                result.recommendedClosetItemIds = [...job.closetItemIds];
             } catch {
                 result = createFallbackResult(job, this.fallbackImageUrlFor(job.id));
             }
