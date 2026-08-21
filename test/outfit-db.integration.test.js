@@ -92,8 +92,9 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
         const persistedJob = await prisma.outfitGenerationJob.findUnique({ where: { id: created.jobId } });
         assert.equal(persistedJob.inputSnapshot.schemaVersion, 'outfit-input-v1');
         assert.equal(persistedJob.inputSnapshot.bodyProfile.id > 0, true);
-        assert.deepEqual(persistedJob.inputSnapshot.selectedItems.map((item) => item.itemId), [closetItem.id, bottomItem.id, shoeItem.id]);
-        assert.deepEqual(persistedJob.inputSnapshot.closetItemPool.map((item) => item.itemId), [closetItem.id, bottomItem.id, shoeItem.id]);
+        const expectedItemIds = [closetItem.id, bottomItem.id, shoeItem.id].sort((left, right) => left - right);
+        assert.deepEqual(persistedJob.inputSnapshot.selectedItems.map((item) => item.itemId).sort((left, right) => left - right), expectedItemIds);
+        assert.deepEqual(persistedJob.inputSnapshot.closetItemPool.map((item) => item.itemId).sort((left, right) => left - right), expectedItemIds);
 
         await assert.rejects(
             () => service.getGenerationJob(otherUser.id, created.jobId),
