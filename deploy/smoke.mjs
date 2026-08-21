@@ -53,25 +53,35 @@ const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X62Q6wAAAABJRU5ErkJggg==',
     'base64'
 );
-const form = new FormData();
-form.set('imageType', 'CLOSET_ITEM');
-form.set('image', new Blob([png], { type: 'image/png' }), 'smoke.png');
-const uploaded = await request('/api/v1/images/upload', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: form
-});
-assert.ok(Number.isSafeInteger(uploaded.imageId));
+const createClosetItem = async (category, name) => {
+    const form = new FormData();
+    form.set('imageType', 'CLOSET_ITEM');
+    form.set('image', new Blob([png], { type: 'image/png' }), `smoke-${category.toLowerCase()}.png`);
+    const uploaded = await request('/api/v1/images/upload', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+        body: form
+    });
+    assert.ok(Number.isSafeInteger(uploaded.imageId));
 
-const closetItem = await request('/api/v1/closets/items', json('POST', {
-    imageId: uploaded.imageId,
-    name: 'Smoke item',
-    size: 'FREE',
-    category: 'TOP',
-    importType: 'MANUAL',
-    tags: ['smoke']
-}, token));
-assert.ok(Number.isSafeInteger(closetItem.item_id));
+    const closetItem = await request('/api/v1/closets/items', json('POST', {
+        imageId: uploaded.imageId,
+        name,
+        size: 'FREE',
+        category,
+        importType: 'MANUAL',
+        tags: ['smoke']
+    }, token));
+    assert.ok(Number.isSafeInteger(closetItem.item_id));
+    return { imageId: uploaded.imageId, itemId: closetItem.item_id };
+};
+
+const smokeItems = await Promise.all([
+    createClosetItem('TOP', 'Smoke top'),
+    createClosetItem('BOTTOM', 'Smoke bottom'),
+    createClosetItem('SHOES', 'Smoke shoes')
+]);
+const [closetItem] = smokeItems;
 
 await request('/api/v1/users/onboarding/style', json('POST', {
     styleTagIds: [1]
@@ -95,7 +105,7 @@ await getPrisma().bodyProfile.upsert({
 });
 
 const generation = await request('/api/v1/outfits/generation-jobs', json('POST', {
-    closetItemIds: [closetItem.item_id],
+    closetItemIds: [closetItem.itemId],
     styleTagIds: [1]
 }, token));
 assert.ok(Number.isSafeInteger(generation.jobId));
@@ -126,14 +136,16 @@ assert.equal(
     'outfit generation puzzle debit is incorrect'
 );
 
-await request(`/api/v1/closets/items/${closetItem.item_id}`, {
-    method: 'DELETE',
-    headers: { authorization: `Bearer ${token}` }
-});
-await request(`/api/v1/images/${uploaded.imageId}`, {
-    method: 'DELETE',
-    headers: { authorization: `Bearer ${token}` }
-});
+for (const smokeItem of smokeItems) {
+    await request(`/api/v1/closets/items/${smokeItem.itemId}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` }
+    });
+    await request(`/api/v1/images/${smokeItem.imageId}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` }
+    });
+}
 
 await disconnectPrisma();
 console.log(`Fitty staging smoke passed: ${process.env.APP_VERSION || 'local'}`);
