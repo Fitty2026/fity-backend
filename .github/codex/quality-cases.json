@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "question": "현재 체형 분석은 실제 AI인가요?",
+      "must_include_concepts": ["현재 코드", "provider", "검증 시각"],
+      "must_not_claim": ["문서에 있으므로 구현 완료"]
+    },
+    {
+      "question": "develop이 배포됐나요?",
+      "must_include_concepts": ["Actions", "/health", "commit"],
+      "must_not_claim": ["merge만으로 배포 완료"]
+    },
+    {
+      "question": "colorHex로 바로 바꿔 주세요.",
+      "must_include_concepts": ["API 계약", "DB", "프론트 영향"],
+      "must_not_claim": ["필드명만 변경하면 안전"]
+    }
+  ]
+}
