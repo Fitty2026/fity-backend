@@ -41,6 +41,22 @@ npm start
 
 마이그레이션에는 `users`, `image_assets`, 사용자·온보딩, 옷장, 코디 생성·저장 관련 테이블이 포함됩니다. 이미 별도 방식으로 만든 팀 DB가 있다면 적용 전에 migration baseline과 기존 데이터 백필 여부를 확인해야 합니다.
 
+## 시연용 공용 옷장
+
+`.env`의 `DEMO_CLOSET_SOURCE_USER_ID`에 시연용 원본 옷장을 보유한 계정 ID를 설정하면, 신규 가입자에게 원본 옷장 아이템과 이미지가 자동으로 복제됩니다.
+
+기존 계정에도 원본 옷장을 추가하려면 아래 명령을 실행합니다.
+
+```bash
+npm run demo:closet:sync
+```
+
+원본 데이터가 바뀐 뒤 기존에 복제된 시연용 데이터만 교체하려면 아래 명령을 사용합니다. 개인이 직접 등록한 옷장 아이템은 유지됩니다.
+
+```bash
+npm run demo:closet:sync -- --replace
+```
+
 ## 검증
 
 ```bash

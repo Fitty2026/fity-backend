@@ -10,11 +10,13 @@ const storage = new LocalImageStorage({
     rootDirectory: process.env.IMAGE_STORAGE_ROOT || path.resolve('var/images')
 });
 const service = new DemoClosetService({ getPrisma, storage });
+const replace = process.argv.includes('--replace');
 
 try {
-    const results = await service.seedAllUsers();
+    const results = await service.seedAllUsers({ replace });
     const created = results.reduce((sum, result) => sum + (result.seeded ? result.count : 0), 0);
-    console.log(`Demo closet sync complete: ${created} items added for ${results.length} users.`);
+    const removed = results.reduce((sum, result) => sum + result.removedCount, 0);
+    console.log(`Demo closet sync complete: ${created} items added and ${removed} prior demo items replaced for ${results.length} users.`);
 } finally {
     await disconnectPrisma();
 }
