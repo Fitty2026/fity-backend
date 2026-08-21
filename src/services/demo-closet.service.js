@@ -96,7 +96,31 @@ export class DemoClosetService {
         return { seeded: true, count: createdCount };
     }
 
-    async seedAllUsers() {
+    async removeDemoClosetForUser(userId) {
+        if (!this.isEnabled() || userId === this.sourceUserId) return { removed: false, count: 0 };
+
+        const prisma = this.getPrisma();
+        const demoItems = await prisma.closetItem.findMany({
+            where: { userId, importType: DEMO_IMPORT_TYPE, deletedAt: null },
+            select: { id: true, imageId: true }
+        });
+        if (demoItems.length === 0) return { removed: false, count: 0 };
+
+        const imageIds = [...new Set(demoItems.map((item) => item.imageId).filter(Boolean))];
+        const images = imageIds.length > 0
+            ? await prisma.imageAsset.findMany({ where: { id: { in: imageIds }, userId }, select: { id: true, storageKey: true } })
+            : [];
+
+        await prisma.$transaction([
+            prisma.closetItem.deleteMany({ where: { id: { in: demoItems.map((item) => item.id) }, userId } }),
+            ...(images.length > 0 ? [prisma.imageAsset.deleteMany({ where: { id: { in: images.map((image) => image.id) }, userId } })] : [])
+        ]);
+
+        await Promise.all(images.map((image) => this.storage.delete(image.storageKey).catch(() => {})));
+        return { removed: true, count: demoItems.length };
+    }
+
+    async seedAllUsers({ replace = false } = {}) {
         if (!this.isEnabled()) {
             throw new Error('DEMO_CLOSET_SOURCE_USER_ID must be configured.');
         }
@@ -105,7 +129,10 @@ export class DemoClosetService {
             select: { id: true }
         });
         const results = [];
-        for (const user of users) results.push({ userId: user.id, ...await this.seedForUser(user.id) });
+        for (const user of users) {
+            const removed = replace ? await this.removeDemoClosetForUser(user.id) : { removed: false, count: 0 };
+            results.push({ userId: user.id, removedCount: removed.count, ...await this.seedForUser(user.id) });
+        }
         return results;
     }
 }

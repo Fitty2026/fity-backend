@@ -50,6 +50,12 @@ deploy/bin/resume-auto-deploy.sh --confirm
 # 수동 백업
 deploy/bin/backup.sh daily
 
+# 기준 시연 옷장을 기존 계정에 복제
+docker compose --env-file .env -f docker-compose.yml exec api npm run demo:closet:sync
+
+# 이전에 복제한 시연 옷장만 최신 원본으로 교체 (개인 등록 옷은 유지)
+docker compose --env-file .env -f docker-compose.yml exec api npm run demo:closet:sync -- --replace
+
 # migration 문제 시 Fitty DB와 이미지 volume을 선택한 백업으로 복원
 deploy/bin/restore-backup.sh backups/predeploy/<timestamp> --confirm-fitty-db-restore
 ```
