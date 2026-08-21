@@ -204,6 +204,17 @@ describe('OutfitService', () => {
             baseClosetItemIds: [6], recommendedClosetItemIds: [6, 4, 7]
         });
     });
+    it('creates a three-item recommendation when no closet item is selected', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, {
+            closetItemIds: [], situation: 'SCHOOL', weather: { condition: 'WINDY' }
+        });
+        assert.deepEqual(created.input.closetItemIds, [5, 6, 7]);
+        assert.deepEqual(repository.jobs[0].inputSnapshot.recommendation, {
+            baseClosetItemIds: [], recommendedClosetItemIds: [5, 6, 7]
+        });
+    });
     it('requires enough compatible items to complete a three-item outfit', async () => {
         const repository = new MemoryOutfitRepository();
         repository.items.set(1, repository.items.get(1).filter((item) => item.id !== 7));

@@ -87,6 +87,19 @@ const assertSingleItemPerCoreCategory = (items) => {
 };
 
 const CORE_OUTFIT_CATEGORIES = ['TOP', 'BOTTOM', 'SHOES'];
+const SITUATION_KEYWORDS = {
+    DATE: ['date', 'romantic', 'feminine', 'formal'],
+    WORK: ['work', 'office', 'formal', 'minimal'],
+    SCHOOL: ['school', 'casual', 'daily', 'comfortable'],
+    TRAVEL: ['travel', 'comfortable', 'casual', 'sport']
+};
+const WEATHER_KEYWORDS = {
+    SUNNY: ['sunny', 'light', 'summer'],
+    CLOUDY: ['cloudy', 'daily'],
+    RAINY: ['rain', 'waterproof', 'outer'],
+    SNOWY: ['snow', 'warm', 'winter', 'outer'],
+    WINDY: ['wind', 'outer', 'jacket']
+};
 const orderedByIds = (items, ids) => {
     const byId = new Map(items.map((item) => [item.id, item]));
     return ids.map((id) => byId.get(id)).filter(Boolean);
@@ -94,7 +107,16 @@ const orderedByIds = (items, ids) => {
 
 // The client selects a base item. The server completes the remaining slots from
 // the authenticated user's active closet so the AI always receives one outfit.
-const completeOutfitFromBaseItems = (baseItemIds, context) => {
+const recommendationScore = (item, input) => {
+    const text = [item.name, ...(item.tags ?? []).map((tag) => tag.tagName)].filter(Boolean).join(' ').toLowerCase();
+    const keywords = [
+        ...(SITUATION_KEYWORDS[input.situation] ?? []),
+        ...(WEATHER_KEYWORDS[input.weather?.condition] ?? [])
+    ];
+    return keywords.reduce((score, keyword) => score + (text.includes(keyword) ? 1 : 0), 0);
+};
+
+const completeOutfitFromBaseItems = (baseItemIds, context, input) => {
     const selectedItems = orderedByIds(context.selectedItems, baseItemIds);
     if (selectedItems.length !== baseItemIds.length) {
         throw httpError(403, 'FORBIDDEN403', 'Closet item is not active or its image is unavailable.');
@@ -106,7 +128,9 @@ const completeOutfitFromBaseItems = (baseItemIds, context) => {
     for (const category of CORE_OUTFIT_CATEGORIES) {
         if (finalItems.length === 3) break;
         if (selectedCategories.has(category)) continue;
-        const candidate = context.closetItemPool.find((item) => item.category === category && !selectedCategories.has(item.category));
+        const candidate = context.closetItemPool
+            .filter((item) => item.category === category && !selectedCategories.has(item.category))
+            .sort((left, right) => recommendationScore(right, input) - recommendationScore(left, input))[0];
         if (!candidate) continue;
         finalItems.push(candidate);
         selectedCategories.add(candidate.category);
@@ -356,7 +380,7 @@ export class OutfitService {
 
     async createGenerationJob(userId, input = {}, rawIdempotencyKey) {
         const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
-        const baseClosetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { required: true, maximum: 3 });
+        const baseClosetItemIds = normalizeIds(input.closetItemIds, 'closetItemIds', { maximum: 3 });
         let styleTagIds = input.styleTagIds == null ? null : normalizeIds(input.styleTagIds, 'styleTagIds');
         const situation = normalizeOptionalEnum(input.situation, 'situation', SITUATIONS);
         const selectedDate = normalizeSelectedDate(input.selectedDate);
@@ -372,7 +396,7 @@ export class OutfitService {
         }
         const baseContext = await this.repository.findGenerationContext(userId, baseClosetItemIds, styleTagIds);
         if (!baseContext.bodyProfile) throw httpError(404, 'NOT_FOUND404', 'Active body profile was not found.');
-        const closetItemIds = completeOutfitFromBaseItems(baseClosetItemIds, baseContext);
+        const closetItemIds = completeOutfitFromBaseItems(baseClosetItemIds, baseContext, { situation, weather });
         const context = closetItemIds.length === baseClosetItemIds.length
             ? baseContext
             : await this.repository.findGenerationContext(userId, closetItemIds, styleTagIds);

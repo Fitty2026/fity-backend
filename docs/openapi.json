@@ -161,9 +161,8 @@
       "CreateGenerationJobRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [ "closetItemIds" ],
         "properties": {
-          "closetItemIds": { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "description": "Send one base closet item. The server completes TOP/BOTTOM/SHOES from the authenticated user's closet and stores the final three IDs. Up to three IDs remain accepted for legacy clients.", "items": { "type": "integer", "minimum": 1 } },
+          "closetItemIds": { "type": "array", "minItems": 0, "maxItems": 3, "uniqueItems": true, "description": "Optionally send up to three user-selected items, with at most one per category. The server fills missing TOP/BOTTOM/SHOES from the authenticated user's closet and stores the final three IDs. Omit or send an empty array to receive a fully automatic recommendation.", "items": { "type": "integer", "minimum": 1 } },
           "styleTagIds": { "type": "array", "uniqueItems": true, "items": { "type": "integer", "minimum": 1 }, "description": "Omit to use stored preferences." },
           "situation": { "type": [ "string", "null" ], "enum": [ "DATE", "WORK", "SCHOOL", "TRAVEL", null ] },
           "selectedDate": { "type": [ "string", "null" ], "format": "date" },

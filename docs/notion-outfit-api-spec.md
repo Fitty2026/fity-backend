@@ -82,7 +82,7 @@
 }
 ```
 
-- `closetItemIds`: 필수, 본인 소유 기준 옷장 아이템 ID 1개. 서버가 같은 사용자 옷장에서 상의·하의·신발을 추천해 최종 3개를 확정함. 기존 클라이언트 호환을 위해 1~3개도 허용
+- `closetItemIds`: 선택, 본인 소유 옷장 아이템 ID 0~3개. 카테고리별 최대 1개. 서버가 비어 있는 상의·하의·신발을 추천해 최종 3개를 확정하며, 생략 또는 빈 배열이면 전부 자동 추천
 - `styleTagIds`: 선택, USER-04 (`GET /api/v1/users/me`) 응답의 `styleTagIds`. 생략하면 BE가 저장된 선호를 사용
 - `situation`: 선택, `DATE`, `WORK`, `SCHOOL`, `TRAVEL`
 - `selectedDate`: 선택, 실제 달력에 존재하는 `YYYY-MM-DD`. 과거·미래 범위 제한 없음
@@ -121,7 +121,7 @@
 
 - 진행 중 job이 있으면 새로 생성하지 않고 같은 구조에 `isExistingJob: true`로 기존 job과 기존 input을 반환
 - 체형 프로필은 JWT 사용자 기준으로 서버가 조회
-- 생성 결과의 `recommendedClosetItemIds`는 기준 옷을 포함해 서버가 확정한 최종 3개 조합이며, Gemini 생성에도 동일한 3개만 전달
+- 생성 결과의 `recommendedClosetItemIds`는 사용자가 선택한 옷과 서버가 추천한 옷을 합친 최종 3개 조합이며, Gemini 생성에도 동일한 3개만 전달
 
 ### Error
 
