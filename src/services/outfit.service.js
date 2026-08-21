@@ -246,7 +246,9 @@ const toSaved = (saved, imageUrlSigner, now = new Date(), closetItems = []) => (
             (new Date(saved.deletedAt).getTime() + DELETED_OUTFIT_TTL_MS - now.getTime()) / (24 * 60 * 60 * 1000)
         ))
     } : {}),
-    isSaved: true
+    isSaved: true,
+    // Saved outfits are the user's liked outfits in the current MVP.
+    isLiked: true
 });
 
 const pagination = ({ page = 1, size = 10 }) => {
@@ -609,10 +611,22 @@ export class OutfitService {
         if (input.name !== undefined) data.name = normalizeText(input.name, `${this.now().toISOString().slice(0, 10)} outfit`, 20, 'name');
         if (input.tags !== undefined) data.tags = normalizeTags(input.tags);
         if (input.memo !== undefined) data.memo = normalizeText(input.memo, null, 200, 'memo');
+        if (input.outfitResultId !== undefined) {
+            const result = await this.repository.findResult(userId, positiveId(input.outfitResultId, 'outfitResultId'));
+            if (!result || isResultExpired(result, this.now())) {
+                throw httpError(404, 'NOT_FOUND404', 'Outfit result was not found.');
+            }
+            data.outfitResultId = result.id;
+        }
         if (Object.keys(data).length === 0) throw httpError(400, 'REQUEST400', 'At least one editable field is required.');
-        const saved = await this.repository.updateSaved(userId, positiveId(rawId, 'savedOutfitId'), data);
-        if (!saved) throw httpError(404, 'NOT_FOUND404', 'Saved outfit was not found.');
-        return await this.toSaved(saved);
+        try {
+            const saved = await this.repository.updateSaved(userId, positiveId(rawId, 'savedOutfitId'), data);
+            if (!saved) throw httpError(404, 'NOT_FOUND404', 'Saved outfit was not found.');
+            return await this.toSaved(saved);
+        } catch (error) {
+            if (error.code === 'P2002') throw httpError(409, 'CONFLICT409', 'Outfit result is already saved.');
+            throw error;
+        }
     }
 
     async deleteSavedOutfit(userId, rawId) {

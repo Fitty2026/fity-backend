@@ -67,7 +67,7 @@ class MemoryOutfitRepository {
     async saveResult({ userId, outfitResultId, name, tags, memo }) { if (this.saved.some((item) => item.userId === userId && item.outfitResultId === outfitResultId)) { const error = new Error('duplicate'); error.code = 'P2002'; throw error; } const now = new Date(); const saved = { id: this.next++, userId, outfitResultId, name, tags, memo, createdAt: now, updatedAt: now, deletedAt: null, outfitResult: await this.findResult(userId, outfitResultId) }; this.saved.push(saved); return saved; }
     async listSaved(userId, skip, take, deleted = false) { const rows = this.saved.filter((item) => item.userId === userId && (deleted ? Boolean(item.deletedAt) : !item.deletedAt)).map((item) => ({ ...item, outfitResult: this.results.find((r) => r.id === item.outfitResultId) })); return [rows.slice(skip, skip + take), rows.length]; }
     async findSaved(userId, id) { return this.saved.find((item) => item.id === id && item.userId === userId && !item.deletedAt) || null; }
-    async updateSaved(userId, id, data) { const item = await this.findSaved(userId, id); if (!item) return null; Object.assign(item, data, { updatedAt: new Date() }); return item; }
+    async updateSaved(userId, id, data) { const item = await this.findSaved(userId, id); if (!item) return null; Object.assign(item, data, { updatedAt: new Date() }); item.outfitResult = await this.findResult(userId, item.outfitResultId); return item; }
     async softDeleteSaved(userId, id, deletedAt = new Date()) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && !saved.deletedAt); if (!item) return { count: 0 }; item.deletedAt = deletedAt; return { count: 1 }; }
     async restoreSaved(userId, id, deletedAfter) { const item = this.saved.find((saved) => saved.id === id && saved.userId === userId && saved.deletedAt && saved.deletedAt > deletedAfter); if (!item) return { count: 0 }; item.deletedAt = null; return { count: 1 }; }
     async permanentDeleteSaved(userId, id) { const index = this.saved.findIndex((saved) => saved.id === id && saved.userId === userId && saved.deletedAt); if (index < 0) return { count: 0 }; this.saved.splice(index, 1); return { count: 1 }; }
@@ -321,9 +321,15 @@ describe('OutfitService', () => {
         const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
         const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
         const saved = await service.saveOutfit(1, { outfitResultId: resultId, name: 'before' });
-        const updated = await service.updateSavedOutfit(1, saved.id, { name: 'after', tags: ['work'], memo: 'updated' });
+        const replacement = await service.createGenerationJob(1, { closetItemIds: [5] }); await service.processGenerationJob(replacement.jobId);
+        const replacementResultId = (await service.getGenerationJob(1, replacement.jobId)).outfitResultId;
+        const updated = await service.updateSavedOutfit(1, saved.id, { name: 'after', tags: ['work'], memo: 'updated', outfitResultId: replacementResultId });
         assert.equal(updated.name, 'after');
+        assert.equal(updated.outfitResultId, replacementResultId);
+        assert.equal(updated.items[0].itemId, 4);
+        assert.equal(updated.isLiked, true);
         assert.deepEqual((await service.getSavedOutfit(1, saved.id)).tags, ['work']);
+        await assert.rejects(() => service.updateSavedOutfit(1, saved.id, { outfitResultId: 999 }), { code: 'NOT_FOUND404' });
         await assert.rejects(() => service.getSavedOutfit(2, saved.id), { code: 'NOT_FOUND404' });
     });
     it('enforces saved outfit name, tag, and memo limits from the API contract', async () => {

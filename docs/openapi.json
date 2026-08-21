@@ -192,6 +192,7 @@
         "additionalProperties": false,
         "minProperties": 1,
         "properties": {
+          "outfitResultId": { "type": "integer", "minimum": 1, "description": "Replacement result created by an item-change revision." },
           "name": { "type": "string", "maxLength": 20 },
           "tags": { "type": "array", "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
           "memo": { "type": "string", "maxLength": 200 }
@@ -227,7 +228,8 @@
           "imageUrl": { "type": "string" },
           "modelVersion": { "type": "string" },
           "promptVersion": { "type": [ "string", "null" ] },
-          "items": { "type": "array", "items": { "type": "integer" } },
+          "items": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "itemId": { "type": "integer" }, "name": { "type": "string" }, "brand": { "type": [ "string", "null" ] }, "category": { "type": [ "string", "null" ] }, "colorText": { "type": [ "string", "null" ] }, "colorHex": { "type": [ "string", "null" ] }, "imageUrl": { "type": [ "string", "null" ] } } } },
+          "itemIds": { "type": "array", "items": { "type": "integer" } },
           "outfitItems": { "type": [ "array", "null" ], "items": { "$ref": "#/components/schemas/OutfitItem" } },
           "styleTags": { "type": "array", "items": { "type": "integer" } },
           "tags": { "type": "array", "items": { "type": "string" } },
@@ -236,7 +238,8 @@
           "updatedAt": { "type": "string", "format": "date-time" },
           "deletedAt": { "type": [ "string", "null" ], "format": "date-time" },
           "deletionDaysRemaining": { "type": "integer", "minimum": 0, "maximum": 30 },
-          "isSaved": { "type": "boolean" }
+          "isSaved": { "type": "boolean" },
+          "isLiked": { "type": "boolean", "description": "Always true for saved outfits in the current MVP." }
         }
       },
       "PuzzleBalance": {
