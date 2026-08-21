@@ -68,7 +68,8 @@ deploy/bin/teardown.sh --confirm-fitty-only
 
 - 앱 rollback은 Prisma migration을 downgrade하지 않습니다.
 - `DROP`, `TRUNCATE`, `DELETE`, `UPDATE`, 위험한 `ALTER` 및 `-- FITTY: MANUAL_DEPLOY_REQUIRED`를 포함한 pending migration은 자동 배포에서 차단합니다.
-- migration 실패·부분 적용은 DB backup과 Prisma migration 상태를 확인하고 `restore-backup.sh`로 명시적으로 복구합니다.
+- 자동 배포에서 migration 실행이 시작된 뒤 검증이 실패하면 API를 중지한 채 배포 직전 DB·이미지 backup을 복원하고, 복원이 끝난 뒤에만 직전 앱을 기동합니다.
+- 자동 복원에 실패하면 API를 중지하고 자동 배포 hold를 활성화합니다. 이 경우 backup과 Prisma migration 상태를 확인한 뒤 `restore-backup.sh`로 명시적으로 복구합니다.
 - 실패한 digest는 다음 tag가 발행될 때까지 다시 시도하지 않으며, 수동 롤백·백업 복원은 자동 배포 hold를 활성화합니다.
 - 프로세스 내부에서 실행 중인 코디 생성 작업은 앱 재시작 시 중단될 수 있습니다.
 - 현재 이미지 저장은 단일 Docker volume이므로 API replica를 늘리지 않습니다.

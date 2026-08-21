@@ -115,6 +115,43 @@ wait_for_api() {
     return 1
 }
 
+restore_backup_contents() {
+    local backup_path="${1:?backup path is required}"
+    local restore_image_ref="${2:?restore image ref is required}"
+    local resolved_backup_path
+    local resolved_backup_root
+
+    resolved_backup_path="$(realpath "${backup_path}")" || return 1
+    resolved_backup_root="$(realpath "${BACKUP_DIR}")" || return 1
+    if [[ "${resolved_backup_path}" != "${resolved_backup_root}/"* \
+        || ! -f "${resolved_backup_path}/database.sql" ]]; then
+        echo "Fitty backup 경로 또는 database.sql이 유효하지 않습니다: ${resolved_backup_path}" >&2
+        return 1
+    fi
+
+    # A partially migrated schema must never be served by either app version.
+    compose stop api >/dev/null 2>&1 || return 1
+    compose up --detach db || return 1
+    wait_for_database || return 1
+    compose exec --no-TTY db sh -c \
+        'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "DROP DATABASE IF EXISTS \`$MYSQL_DATABASE\`; CREATE DATABASE \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"' \
+        || return 1
+    compose exec --no-TTY db sh -c \
+        'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' \
+        < "${resolved_backup_path}/database.sql" \
+        || return 1
+
+    if [[ -f "${resolved_backup_path}/images.tar.gz" ]]; then
+        docker --config "${DOCKER_CONFIG_DIR}" run --rm --interactive \
+            --entrypoint sh \
+            --volume fitty-staging_image_data:/target \
+            "${restore_image_ref}" \
+            -c 'find /target -mindepth 1 -delete && tar -C /target -xzf -' \
+            < "${resolved_backup_path}/images.tar.gz" \
+            || return 1
+    fi
+}
+
 check_external_health() {
     local expected_version="${1:?expected APP_VERSION is required}"
     if [[ "${EXTERNAL_HEALTH_REQUIRED:-false}" != "true" ]]; then

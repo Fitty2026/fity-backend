@@ -29,27 +29,14 @@ write_state_atomically "${STATE_DIR}/hold.env" \
     "REASON=backup-restore-in-progress" \
     "BACKUP_PATH=${backup_path}" \
     "CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-compose stop api
-
 restore_failed() {
+    trap - ERR
+    compose stop api >/dev/null 2>&1 || true
     echo "백업 복원에 실패했습니다. 구조 복구 전 API를 중지 상태로 유지합니다. 구조 전 백업: ${rescue_path}" >&2
 }
 trap restore_failed ERR
 
-compose exec --no-TTY db sh -c \
-    'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "DROP DATABASE IF EXISTS \`$MYSQL_DATABASE\`; CREATE DATABASE \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"'
-compose exec --no-TTY db sh -c \
-    'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' \
-    < "${backup_path}/database.sql"
-
-if [[ -f "${backup_path}/images.tar.gz" ]]; then
-    docker --config "${DOCKER_CONFIG_DIR}" run --rm --interactive \
-        --entrypoint sh \
-        --volume fitty-staging_image_data:/target \
-        "${IMAGE_REF}" \
-        -c 'find /target -mindepth 1 -delete && tar -C /target -xzf -' \
-        < "${backup_path}/images.tar.gz"
-fi
+restore_backup_contents "${backup_path}" "${IMAGE_REF}"
 
 compose up --detach api
 wait_for_api
