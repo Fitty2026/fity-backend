@@ -77,10 +77,6 @@ await request('/api/v1/users/onboarding/style', json('POST', {
     styleTagIds: [1]
 }, token));
 
-await request('/api/v1/body-profiles/type', json('POST', {
-    bodyType: 'STRAIGHT'
-}, token));
-
 await getPrisma().bodyProfile.upsert({
     where: { userId: smokeUserId },
     create: {
