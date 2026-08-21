@@ -43,6 +43,24 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
                 importType: 'MANUAL'
             }
         });
+        const bottomItem = await prisma.closetItem.create({
+            data: {
+                userId: owner.id,
+                imageId: image.id,
+                name: 'Integration trousers',
+                category: 'BOTTOM',
+                importType: 'MANUAL'
+            }
+        });
+        const shoeItem = await prisma.closetItem.create({
+            data: {
+                userId: owner.id,
+                imageId: image.id,
+                name: 'Integration sneakers',
+                category: 'SHOES',
+                importType: 'MANUAL'
+            }
+        });
         await prisma.bodyProfile.create({ data: { userId: owner.id } });
         await prisma.puzzleWallet.create({ data: { userId: owner.id, balance: 20 } });
 
@@ -74,8 +92,9 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
         const persistedJob = await prisma.outfitGenerationJob.findUnique({ where: { id: created.jobId } });
         assert.equal(persistedJob.inputSnapshot.schemaVersion, 'outfit-input-v1');
         assert.equal(persistedJob.inputSnapshot.bodyProfile.id > 0, true);
-        assert.deepEqual(persistedJob.inputSnapshot.selectedItems.map((item) => item.itemId), [closetItem.id]);
-        assert.deepEqual(persistedJob.inputSnapshot.closetItemPool.map((item) => item.itemId), [closetItem.id]);
+        const expectedItemIds = [closetItem.id, bottomItem.id, shoeItem.id].sort((left, right) => left - right);
+        assert.deepEqual(persistedJob.inputSnapshot.selectedItems.map((item) => item.itemId).sort((left, right) => left - right), expectedItemIds);
+        assert.deepEqual(persistedJob.inputSnapshot.closetItemPool.map((item) => item.itemId).sort((left, right) => left - right), expectedItemIds);
 
         await assert.rejects(
             () => service.getGenerationJob(otherUser.id, created.jobId),
@@ -88,7 +107,7 @@ test('persists the authenticated outfit lifecycle in MySQL', { skip: !runDatabas
         assert.equal(completed.progress, 100);
         assert.ok(completed.outfitResultId);
         const persistedResult = await prisma.outfitResult.findUnique({ where: { id: completed.outfitResultId } });
-        assert.deepEqual(persistedResult.recommendedClosetItemIds, [closetItem.id]);
+        assert.deepEqual(persistedResult.recommendedClosetItemIds, [closetItem.id, bottomItem.id, shoeItem.id]);
 
         const saved = await service.saveOutfit(owner.id, {
             outfitResultId: completed.outfitResultId,

@@ -115,7 +115,10 @@ describe('OutfitService', () => {
         assert.deepEqual(second.input, first.input);
         assert.equal(repository.jobs.length, 1);
         assert.equal(repository.jobs[0].inputSnapshot.bodyProfile.bodyBalance, 'BALANCED');
-        assert.deepEqual(repository.jobs[0].inputSnapshot.selectedItems.map((item) => item.itemId), [4]);
+        assert.deepEqual(repository.jobs[0].inputSnapshot.selectedItems.map((item) => item.itemId), [4, 6, 7]);
+        assert.deepEqual(repository.jobs[0].inputSnapshot.recommendation, {
+            baseClosetItemIds: [4], recommendedClosetItemIds: [4, 6, 7]
+        });
         assert.deepEqual(repository.jobs[0].inputSnapshot.closetItemPool.map((item) => item.itemId), [4, 5, 6, 7]);
         assert.equal(repository.jobs[0].inputSnapshot.selectedItems[0].imageRef.contentPath, '/api/v1/images/14/content');
     });
@@ -178,7 +181,7 @@ describe('OutfitService', () => {
         assert.equal(windy.input.weather.temperature, undefined);
         assert.equal(windy.input.selectedDate, '1999-12-31');
     });
-    it('accepts exactly three closet items', async () => {
+    it('keeps an explicitly complete three-item outfit', async () => {
         const service = new OutfitService({ repository: new MemoryOutfitRepository(), aiAdapter: readyAdapter });
         const created = await service.createGenerationJob(1, { closetItemIds: [4, 6, 7] });
         assert.deepEqual(created.input.closetItemIds, [4, 6, 7]);
@@ -191,6 +194,32 @@ describe('OutfitService', () => {
         );
         const created = await service.createGenerationJob(1, { closetItemIds: [4, 6, 7] });
         assert.deepEqual(created.input.closetItemIds, [4, 6, 7]);
+    });
+    it('completes a single base item from the authenticated user closet', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, { closetItemIds: [6] });
+        assert.deepEqual(created.input.closetItemIds, [6, 4, 7]);
+        assert.deepEqual(repository.jobs[0].inputSnapshot.recommendation, {
+            baseClosetItemIds: [6], recommendedClosetItemIds: [6, 4, 7]
+        });
+    });
+    it('creates a three-item recommendation when no closet item is selected', async () => {
+        const repository = new MemoryOutfitRepository();
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        const created = await service.createGenerationJob(1, {
+            closetItemIds: [], situation: 'SCHOOL', weather: { condition: 'WINDY' }
+        });
+        assert.deepEqual(created.input.closetItemIds, [5, 6, 7]);
+        assert.deepEqual(repository.jobs[0].inputSnapshot.recommendation, {
+            baseClosetItemIds: [], recommendedClosetItemIds: [5, 6, 7]
+        });
+    });
+    it('requires enough compatible items to complete a three-item outfit', async () => {
+        const repository = new MemoryOutfitRepository();
+        repository.items.set(1, repository.items.get(1).filter((item) => item.id !== 7));
+        const service = new OutfitService({ repository, aiAdapter: readyAdapter });
+        await assert.rejects(() => service.createGenerationJob(1, { closetItemIds: [4] }), { code: 'REQUEST400' });
     });
     it('expires a stalled active job after ten minutes', async () => {
         const repository = new MemoryOutfitRepository();
@@ -233,7 +262,7 @@ describe('OutfitService', () => {
             promptVersion: null,
             fallbackUsed: true,
             outfitItems: null,
-            recommendedClosetItemIds: [4]
+            recommendedClosetItemIds: [4, 6, 7]
         });
         assert.equal(result.failure, null);
     });
@@ -291,17 +320,8 @@ describe('OutfitService', () => {
         const created = await service.createGenerationJob(1, { closetItemIds: [4] }); await service.processGenerationJob(created.jobId);
         const resultId = (await service.getGenerationJob(1, created.jobId)).outfitResultId;
         const saved = await service.saveOutfit(1, { outfitResultId: resultId, name: 'daily', tags: ['date'], memo: 'memo' });
-        assert.deepEqual(saved.items, [{
-            id: 4,
-            itemId: 4,
-            name: 'shirt',
-            brand: null,
-            category: 'TOP',
-            colorText: null,
-            colorHex: null,
-            imageUrl: '/api/v1/images/14/content'
-        }]);
-        assert.deepEqual(saved.itemIds, [4]);
+        assert.deepEqual(saved.itemIds, [4, 6, 7]);
+        assert.deepEqual(saved.items.map((item) => item.itemId), [4, 6, 7]);
         const deleted = await service.deleteSavedOutfit(1, saved.id);
         assert.equal(deleted.savedOutfitId, saved.id);
         assert.ok(deleted.deletedAt instanceof Date);
@@ -327,7 +347,7 @@ describe('OutfitService', () => {
         const updated = await service.updateSavedOutfit(1, saved.id, { name: 'after', tags: ['work'], memo: 'updated', outfitResultId: replacementResultId });
         assert.equal(updated.name, 'after');
         assert.equal(updated.outfitResultId, replacementResultId);
-        assert.equal(updated.items[0].itemId, 4);
+        assert.equal(updated.items[0].itemId, 5);
         assert.equal(updated.isLiked, false);
         assert.deepEqual((await service.getSavedOutfit(1, saved.id)).tags, ['work']);
         await assert.rejects(() => service.updateSavedOutfit(1, saved.id, { outfitResultId: 999 }), { code: 'NOT_FOUND404' });
@@ -372,8 +392,8 @@ describe('OutfitService', () => {
         assert.equal(revision.revisionId, 4);
         assert.equal(revision.parentOutfitResultId, resultId);
         const revisionJob = repository.jobs.find((job) => job.id === revision.jobId);
-        assert.deepEqual(revisionJob.closetItemIds, [5]);
-        assert.deepEqual(revisionJob.inputSnapshot.selectedItems.map((item) => item.itemId), [5]);
+        assert.deepEqual(revisionJob.closetItemIds, [5, 6, 7]);
+        assert.deepEqual(revisionJob.inputSnapshot.selectedItems.map((item) => item.itemId), [5, 6, 7]);
         assert.deepEqual(revisionJob.inputSnapshot.closetItemPool.map((item) => item.itemId), [4, 5, 6, 7]);
         await service.processGenerationJob(revision.jobId);
         await assert.rejects(() => service.createRevision(1, resultId, { replaceItemId: 4, newItemId: 6 }), { code: 'ITEM_NOT_COMPATIBLE' });
@@ -475,7 +495,7 @@ describe('OutfitService', () => {
         const job = await service.getGenerationJob(1, created.jobId);
         assert.equal(job.status, 'completed');
         assert.equal(job.generatedImage.fallbackUsed, true);
-        assert.deepEqual(job.generatedImage.recommendedClosetItemIds, [4]);
+        assert.deepEqual(job.generatedImage.recommendedClosetItemIds, [4, 6, 7]);
     });
     it('accepts only root-relative or HTTPS fallback URLs', async () => {
         const repository = new MemoryOutfitRepository();

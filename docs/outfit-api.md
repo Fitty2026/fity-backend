@@ -17,7 +17,7 @@
 
 ```json
 {
-  "closetItemIds": [21, 24],
+  "closetItemIds": [21],
   "styleTagIds": [1, 3],
   "situation": "DATE",
   "selectedDate": "2026-07-31",
@@ -30,7 +30,7 @@
 
 | 필드 | 필수 | 규칙 |
 | --- | --- | --- |
-| `closetItemIds` | Y | 인증 사용자가 소유한 옷장 아이템 ID, 1~3개 |
+| `closetItemIds` | N | 인증 사용자가 직접 선택한 옷장 아이템 ID, 0~3개. 카테고리별 최대 1개. 서버가 비어 있는 상의·하의·신발 카테고리를 채워 최종 3개를 확정 |
 | `styleTagIds` | N | 사용자 프로필에 저장된 스타일 태그 ID. 생략하면 서버가 현재 저장된 선호를 사용 |
 | `situation` | N | `DATE`, `WORK`, `SCHOOL`, `TRAVEL` |
 | `selectedDate` | N | 실제 달력에 존재하는 `YYYY-MM-DD`, 과거·미래 범위 제한 없음 |
@@ -52,6 +52,8 @@
 }
 ```
 
+선택한 아이템은 인증 사용자가 소유하고 이미지가 활성 상태여야 합니다. 같은 카테고리의 아이템을 두 개 이상 선택하면 `REQUEST400`을 반환합니다. 서버는 선택된 아이템을 유지하고, 상황·날씨·스타일 정보와 옷 이름/태그를 우선순위에 반영해 비어 있는 상의·하의·신발 카테고리를 채웁니다. 아이템을 하나도 선택하지 않으면 3개 모두 자동 추천합니다. 조합을 완성할 옷이 부족하면 `REQUEST400`을 반환합니다. 확정된 3개 ID는 job의 `input.closetItemIds`, 생성 결과의 `recommendedClosetItemIds`에 저장됩니다.
+
 사용자당 `queued`, `processing`, `qc_pending` 작업은 1개만 허용합니다. 진행 중 작업이 있으면 새 작업을 만들지 않고 `isExistingJob: true`로 기존 작업과 기존 입력 snapshot을 반환합니다.
 
 ```json
@@ -62,7 +64,7 @@
   "inputSchemaVersion": "outfit-input-v1",
   "isExistingJob": false,
   "input": {
-    "closetItemIds": [21, 24],
+    "closetItemIds": [21, 24, 38],
     "styleTagIds": [1, 3],
     "situation": "DATE",
     "selectedDate": "2026-07-31",

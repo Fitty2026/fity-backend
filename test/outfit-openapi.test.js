@@ -30,7 +30,8 @@ describe('BE4 OpenAPI contract', () => {
 
     it('matches the generation request constraints used by the service', () => {
         const request = specification.components.schemas.CreateGenerationJobRequest;
-        assert.deepEqual(request.required, ['closetItemIds']);
+        assert.equal(request.required, undefined);
+        assert.equal(request.properties.closetItemIds.minItems, 0);
         assert.equal(request.properties.closetItemIds.maxItems, 3);
         assert.deepEqual(
             specification.components.schemas.Weather.oneOf[1].properties.condition.enum,
