@@ -308,6 +308,10 @@ export class OutfitRepository {
         });
     }
 
+    setSavedLike(userId, id, isLiked) {
+        return this.updateSaved(userId, id, { isLiked });
+    }
+
     purgeDeletedSavedOutfits(deletedBefore) {
         return this.prisma.savedOutfit.deleteMany({
             where: { deletedAt: { not: null, lte: deletedBefore } }

@@ -16,6 +16,8 @@
 | SAVED-06 | 최근 삭제 코디 목록 조회 | GET | `/api/v1/outfits/saved/deleted` |
 | SAVED-07 | 최근 삭제 코디 복구 | POST | `/api/v1/outfits/saved/:savedOutfitId/restore` |
 | SAVED-08 | 최근 삭제 코디 영구 삭제 | DELETE | `/api/v1/outfits/saved/:savedOutfitId/permanent` |
+| SAVED-09 | 저장 코디 좋아요 추가 | POST | `/api/v1/outfits/saved/:savedOutfitId/likes` |
+| SAVED-10 | 저장 코디 좋아요 취소 | DELETE | `/api/v1/outfits/saved/:savedOutfitId/likes` |
 
 - 모든 행의 파트는 `BE4`, 담당자는 `수정 권`입니다.
 - 새 행과 아직 병합되지 않은 변경은 `개발중`으로 두고 PR 및 CI 통과 후 `개발완료`로 변경합니다.
@@ -458,3 +460,33 @@
 - `400 REQUEST400`: ID 형식 오류
 - `401 AUTH401_01`: 인증 실패
 - `404 NOT_FOUND404`: 삭제 코디가 없거나 소유자가 아니거나 먼저 soft delete되지 않음
+
+## SAVED-09 - 저장 코디 좋아요 추가
+
+- Method: `POST`
+- Path: `/api/v1/outfits/saved/:savedOutfitId/likes`
+- Path Variable: `savedOutfitId` - 양의 정수
+- Request Body: 없음
+- Response Body: SAVED-01의 `result` 구조와 동일하며 `isLiked`는 `true`
+- 이미 좋아요 상태여도 동일하게 성공 응답을 반환
+
+### Error
+
+- `400 REQUEST400`: ID 형식 오류
+- `401 AUTH401_01`: 인증 실패
+- `404 NOT_FOUND404`: 저장 코디가 없거나 소유자가 아니거나 삭제됨
+
+## SAVED-10 - 저장 코디 좋아요 취소
+
+- Method: `DELETE`
+- Path: `/api/v1/outfits/saved/:savedOutfitId/likes`
+- Path Variable: `savedOutfitId` - 양의 정수
+- Request Body: 없음
+- Response Body: SAVED-01의 `result` 구조와 동일하며 `isLiked`는 `false`
+- 이미 좋아요가 취소된 상태여도 동일하게 성공 응답을 반환
+
+### Error
+
+- `400 REQUEST400`: ID 형식 오류
+- `401 AUTH401_01`: 인증 실패
+- `404 NOT_FOUND404`: 저장 코디가 없거나 소유자가 아니거나 삭제됨

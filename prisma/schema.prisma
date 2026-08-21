@@ -239,6 +239,7 @@ model SavedOutfit {
   name           String       @db.VarChar(120)
   tags           Json
   memo           String?      @db.VarChar(500)
+  isLiked        Boolean      @default(false) @map("is_liked")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
   deletedAt      DateTime?    @map("deleted_at")

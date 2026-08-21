@@ -112,6 +112,20 @@
         "responses": { "200": { "$ref": "#/components/responses/SavedOutfitResponse" }, "400": { "$ref": "#/components/responses/Error" }, "401": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
       }
     },
+    "/outfits/saved/{savedOutfitId}/likes": {
+      "post": {
+        "operationId": "likeSavedOutfit",
+        "summary": "Like a saved outfit",
+        "parameters": [ { "$ref": "#/components/parameters/SavedOutfitId" } ],
+        "responses": { "200": { "$ref": "#/components/responses/SavedOutfitResponse" }, "400": { "$ref": "#/components/responses/Error" }, "401": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      },
+      "delete": {
+        "operationId": "unlikeSavedOutfit",
+        "summary": "Remove a like from a saved outfit",
+        "parameters": [ { "$ref": "#/components/parameters/SavedOutfitId" } ],
+        "responses": { "200": { "$ref": "#/components/responses/SavedOutfitResponse" }, "400": { "$ref": "#/components/responses/Error" }, "401": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
     "/outfits/saved/{savedOutfitId}/permanent": {
       "delete": {
         "operationId": "permanentlyDeleteSavedOutfit",
@@ -239,7 +253,7 @@
           "deletedAt": { "type": [ "string", "null" ], "format": "date-time" },
           "deletionDaysRemaining": { "type": "integer", "minimum": 0, "maximum": 30 },
           "isSaved": { "type": "boolean" },
-          "isLiked": { "type": "boolean", "description": "Always true for saved outfits in the current MVP." }
+          "isLiked": { "type": "boolean", "description": "Whether the authenticated user has liked this saved outfit." }
         }
       },
       "PuzzleBalance": {
