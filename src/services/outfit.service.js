@@ -222,7 +222,7 @@ const toRevision = (job, revision) => ({
     expiresAt: job.expiresAt
 });
 
-const toSaved = (saved, imageUrlSigner, now = new Date()) => ({
+const toSaved = (saved, imageUrlSigner, now = new Date(), closetItems = []) => ({
     id: saved.id,
     savedOutfitId: saved.id,
     outfitResultId: saved.outfitResultId,
@@ -230,7 +230,10 @@ const toSaved = (saved, imageUrlSigner, now = new Date()) => ({
     imageUrl: presentImageUrl(saved.outfitResult.generatedImageUrl, imageUrlSigner),
     modelVersion: saved.outfitResult.modelVersion,
     promptVersion: saved.outfitResult.promptVersion ?? null,
-    items: saved.outfitResult.recommendedClosetItemIds,
+    // Keep rich item data for the saved-outfit screen, while retaining IDs for callers
+    // that only need the original generation input.
+    items: closetItems,
+    itemIds: saved.outfitResult.recommendedClosetItemIds,
     outfitItems: saved.outfitResult.outfitItems ?? null,
     styleTags: saved.outfitResult.generationJob?.styleTagIds ?? [],
     tags: saved.tags,
@@ -282,8 +285,26 @@ export class OutfitService {
         return toJob(job, { ...options, imageUrlSigner: this.imageUrlSigner });
     }
 
-    toSaved(saved) {
-        return toSaved(saved, this.imageUrlSigner, this.now());
+    async toSaved(saved) {
+        const itemIds = saved.outfitResult.recommendedClosetItemIds ?? [];
+        const foundItems = await this.repository.findOwnedClosetItems(saved.userId, itemIds);
+        const itemById = new Map(foundItems.map((item) => [item.id, item]));
+        const closetItems = itemIds.map((itemId) => {
+            const item = itemById.get(itemId);
+            if (!item) return { id: itemId, itemId, name: `Deleted item #${itemId}`, category: null, imageUrl: null };
+            const imageId = item.imageAsset?.id ?? item.imageId;
+            return {
+                id: item.id,
+                itemId: item.id,
+                name: item.name,
+                brand: item.brand ?? null,
+                category: item.category,
+                colorText: item.colorText ?? null,
+                colorHex: item.colorHex ?? null,
+                imageUrl: imageId ? this.imageUrlSigner?.createSignedUrl(imageId) ?? `/api/v1/images/${imageId}/content` : null
+            };
+        });
+        return toSaved(saved, this.imageUrlSigner, this.now(), closetItems);
     }
 
     fallbackImageUrlFor(jobId) {
@@ -550,7 +571,7 @@ export class OutfitService {
         if (!result) throw httpError(404, 'NOT_FOUND404', 'Outfit result was not found.');
         if (isResultExpired(result, this.now())) throw httpError(404, 'NOT_FOUND404', 'Outfit result is no longer available.');
         try {
-            return this.toSaved(await this.repository.saveResult({
+            return await this.toSaved(await this.repository.saveResult({
                 userId, outfitResultId: result.id,
                 name: normalizeText(name, `${this.now().toISOString().slice(0, 10)} outfit`, 20, 'name'),
                 tags: normalizeTags(tags),
@@ -565,7 +586,7 @@ export class OutfitService {
     async getSavedOutfits(userId, query) {
         const { page, size } = pagination(query);
         const [items, totalCount] = await this.repository.listSaved(userId, (page - 1) * size, size, false);
-        return { items: items.map((item) => this.toSaved(item)), pagination: { page, size, totalCount } };
+        return { items: await Promise.all(items.map((item) => this.toSaved(item))), pagination: { page, size, totalCount } };
     }
 
     async getDeletedSavedOutfits(userId, query) {
@@ -574,13 +595,13 @@ export class OutfitService {
             new Date(this.now().getTime() - DELETED_OUTFIT_TTL_MS)
         );
         const [items, totalCount] = await this.repository.listSaved(userId, (page - 1) * size, size, true);
-        return { items: items.map((item) => this.toSaved(item)), pagination: { page, size, totalCount } };
+        return { items: await Promise.all(items.map((item) => this.toSaved(item))), pagination: { page, size, totalCount } };
     }
 
     async getSavedOutfit(userId, rawId) {
         const saved = await this.repository.findSaved(userId, positiveId(rawId, 'savedOutfitId'));
         if (!saved) throw httpError(404, 'NOT_FOUND404', 'Saved outfit was not found.');
-        return this.toSaved(saved);
+        return await this.toSaved(saved);
     }
 
     async updateSavedOutfit(userId, rawId, input = {}) {
@@ -591,7 +612,7 @@ export class OutfitService {
         if (Object.keys(data).length === 0) throw httpError(400, 'REQUEST400', 'At least one editable field is required.');
         const saved = await this.repository.updateSaved(userId, positiveId(rawId, 'savedOutfitId'), data);
         if (!saved) throw httpError(404, 'NOT_FOUND404', 'Saved outfit was not found.');
-        return this.toSaved(saved);
+        return await this.toSaved(saved);
     }
 
     async deleteSavedOutfit(userId, rawId) {
