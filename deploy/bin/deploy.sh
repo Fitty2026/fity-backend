@@ -50,21 +50,62 @@ if ! backup_path="$("${SCRIPT_DIR}/backup.sh" predeploy --no-lock)"; then
     exit 1
 fi
 
-rollback_app() {
-    echo "새 앱 검증에 실패해 직전 앱으로 복구합니다." >&2
+migration_started=false
+rollback_deployment() {
+    local original_status=$?
+    local recovery_ok=true
+
+    trap - ERR
+    set +e
+    echo "새 배포 검증에 실패해 배포 직전 상태로 복구합니다." >&2
     write_state_atomically "${STATE_DIR}/rejected.env" \
         "IMAGE_REF=${desired_ref}" \
-        "REJECTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    if [[ -n "${previous_ref}" ]]; then
-        set_runtime_values "${previous_ref}" "${previous_version:-unknown}"
-        compose up --detach api
-        wait_for_api || true
-    else
+        "REJECTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "BACKUP_PATH=${backup_path}" \
+        "MIGRATION_STARTED=${migration_started}" \
+        || true
+
+    if [[ "${migration_started}" == "true" ]]; then
+        echo "부분 적용 가능성이 있는 DB·이미지를 배포 직전 백업에서 복원합니다: ${backup_path}" >&2
+        if ! restore_backup_contents "${backup_path}" "${previous_ref:-${desired_ref}}"; then
+            recovery_ok=false
+        fi
+    elif ! compose stop api >/dev/null 2>&1; then
+        recovery_ok=false
+    fi
+
+    if [[ "${recovery_ok}" == "true" && -n "${previous_ref}" ]]; then
+        set_runtime_values "${previous_ref}" "${previous_version:-unknown}" || recovery_ok=false
+        if [[ "${recovery_ok}" == "true" ]]; then
+            compose up --detach api || recovery_ok=false
+        fi
+        if [[ "${recovery_ok}" == "true" ]]; then
+            wait_for_api || recovery_ok=false
+        fi
+        if [[ "${recovery_ok}" == "true" ]]; then
+            compose exec --no-TTY api node /app/scripts/staging-smoke.mjs || recovery_ok=false
+        fi
+    elif [[ -z "${previous_ref}" ]]; then
         compose stop api >/dev/null 2>&1 || true
         compose rm --force api >/dev/null 2>&1 || true
     fi
+
+    if [[ "${recovery_ok}" != "true" ]]; then
+        compose stop api >/dev/null 2>&1 || true
+        write_state_atomically "${STATE_DIR}/hold.env" \
+            "REASON=automatic-deploy-recovery-failed" \
+            "BACKUP_PATH=${backup_path}" \
+            "CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            || true
+        echo "자동 복구에 실패해 API를 중지하고 자동 배포 hold를 설정했습니다: ${backup_path}" >&2
+    fi
+
+    if ((original_status == 0)); then
+        original_status=1
+    fi
+    exit "${original_status}"
 }
-trap rollback_app ERR
+trap rollback_deployment ERR
 
 set_runtime_values "${desired_ref}" "${revision}"
 compose up --detach db
@@ -80,6 +121,7 @@ compose --profile tools run --rm \
     --env "ALLOW_DESTRUCTIVE_MIGRATIONS=${ALLOW_DESTRUCTIVE_MIGRATIONS:-false}" \
     migrate \
     /app/scripts/check-migrations.mjs
+migration_started=true
 compose --profile tools run --rm migrate
 compose up --detach api
 wait_for_api
