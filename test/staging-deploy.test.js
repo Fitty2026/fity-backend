@@ -17,6 +17,15 @@ test('staging passes the Naver receipt OCR configuration to the API container', 
     assert.match(compose, /NAVER_OCR_SECRET_KEY:\s*\$\{NAVER_OCR_SECRET_KEY:-\}/);
 });
 
+test('runtime image includes the demo closet synchronization script', async () => {
+    const dockerfile = await readRepositoryFile('Dockerfile');
+
+    assert.match(
+        dockerfile,
+        /COPY scripts\/seed-demo-closet\.js \.\/scripts\/seed-demo-closet\.js/
+    );
+});
+
 test('failed staging migration restores the predeploy snapshot before starting the previous app', async () => {
     const deploy = await readRepositoryFile('deploy/bin/deploy.sh');
 
