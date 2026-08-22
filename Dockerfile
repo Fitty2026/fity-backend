@@ -33,6 +33,7 @@ COPY package.json package-lock.json prisma.config.ts ./
 COPY prisma ./prisma
 COPY public ./public
 COPY src ./src
+COPY scripts/seed-demo-closet.js ./scripts/seed-demo-closet.js
 COPY deploy/smoke.mjs ./scripts/staging-smoke.mjs
 COPY deploy/check-migrations.mjs ./scripts/check-migrations.mjs
 
