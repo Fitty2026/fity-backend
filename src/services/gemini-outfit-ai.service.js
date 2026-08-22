@@ -150,7 +150,15 @@ export class GeminiOutfitAiAdapter {
                     }
                 })
             });
-            if (!response.ok) throw adapterError('AI_UNAVAILABLE', `Gemini returned ${response.status}.`);
+            if (!response.ok) {
+                const payload = await response.json().catch(() => null);
+                const error = adapterError(
+                    response.status === 429 ? 'AI_QUOTA_EXCEEDED' : 'AI_UNAVAILABLE',
+                    payload?.error?.message || `Gemini returned ${response.status}.`
+                );
+                error.upstreamStatus = response.status;
+                throw error;
+            }
             const data = await response.json().catch((cause) => {
                 throw adapterError('AI_INVALID_RESPONSE', 'Gemini returned invalid JSON.', cause);
             });

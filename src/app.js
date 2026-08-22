@@ -18,6 +18,7 @@ import { OutfitService } from './services/outfit.service.js';
 import { OutfitAiAdapter } from './services/outfit-ai.service.js';
 import { PuzzleService } from './services/puzzle.service.js';
 import { GeminiOutfitAiAdapter } from './services/gemini-outfit-ai.service.js';
+import { OutfitPreviewFallbackAdapter } from './services/outfit-preview-fallback.service.js';
 import { LocalImageStorage } from './storage/local-image.storage.js';
 import { ClosetService } from './services/closet.service.js';
 import { DemoClosetService } from './services/demo-closet.service.js';
@@ -55,6 +56,7 @@ const createDefaultOutfitAiAdapter = (imageService) => {
 const createDefaultOutfitService = (imageService) => new OutfitService({
     repository: new OutfitRepository(getPrisma),
     aiAdapter: createDefaultOutfitAiAdapter(imageService),
+    fallbackAdapter: new OutfitPreviewFallbackAdapter({ imageService }),
     imageUrlSigner
 });
 const createDefaultPuzzleService = () => new PuzzleService({

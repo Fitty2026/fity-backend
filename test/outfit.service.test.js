@@ -266,6 +266,41 @@ describe('OutfitService', () => {
         });
         assert.equal(result.failure, null);
     });
+    it('uses a dynamic fallback and records the hidden AI failure', async () => {
+        const repository = new MemoryOutfitRepository();
+        const errors = [];
+        const service = new OutfitService({
+            repository,
+            aiAdapter: {
+                generate: async () => {
+                    throw Object.assign(new Error('quota exhausted'), {
+                        code: 'AI_QUOTA_EXCEEDED', upstreamStatus: 429
+                    });
+                }
+            },
+            fallbackAdapter: {
+                generate: async ({ closetItemIds }) => ({
+                    generatedImageUrl: '/api/v1/images/77/content',
+                    provider: 'fitty-preview-fallback',
+                    modelVersion: 'preview-v1',
+                    promptVersion: null,
+                    fallbackUsed: true,
+                    outfitItems: closetItemIds.map((itemId) => ({ slot: 'item', itemId })),
+                    recommendedClosetItemIds: closetItemIds
+                })
+            },
+            logger: { error: (...args) => errors.push(args) }
+        });
+        const created = await service.createGenerationJob(1, { closetItemIds: [4] });
+        await service.processGenerationJob(created.jobId);
+        const result = await service.getGenerationJob(1, created.jobId);
+
+        assert.equal(result.status, 'completed');
+        assert.equal(result.generatedImage.provider, 'fitty-preview-fallback');
+        assert.equal(result.generatedImage.imageUrl, '/api/v1/images/77/content');
+        assert.equal(errors[0][1].code, 'AI_QUOTA_EXCEEDED');
+        assert.equal(errors[0][1].upstreamStatus, 429);
+    });
     it('returns a browser-loadable signed URL for stored generated images', async () => {
         const repository = new MemoryOutfitRepository();
         const service = new OutfitService({
