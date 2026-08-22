@@ -326,23 +326,27 @@ export class OutfitService {
     constructor({
         repository,
         aiAdapter,
+        fallbackAdapter,
         fallbackImageUrl,
         fallbackImageUrls = fallbackImageUrl
             ? [fallbackImageUrl]
             : process.env.FALLBACK_OUTFIT_IMAGE_URLS?.split(',') ?? DEFAULT_FALLBACK_IMAGE_URLS,
         puzzleCost = Number(process.env.OUTFIT_GENERATION_PUZZLE_COST ?? DEFAULT_OUTFIT_GENERATION_PUZZLE_COST),
         imageUrlSigner,
-        now = () => new Date()
+        now = () => new Date(),
+        logger = console
     }) {
         if (!Number.isSafeInteger(puzzleCost) || puzzleCost <= 0) {
             throw new TypeError('puzzleCost must be a positive safe integer.');
         }
         this.repository = repository;
         this.aiAdapter = aiAdapter;
+        this.fallbackAdapter = fallbackAdapter;
         this.fallbackImageUrls = [...new Set(fallbackImageUrls.map(normalizeFallbackImageUrl))];
         this.puzzleCost = puzzleCost;
         this.imageUrlSigner = imageUrlSigner;
         this.now = now;
+        this.logger = logger;
     }
 
     toJob(job, options = {}) {
@@ -597,8 +601,29 @@ export class OutfitService {
                 // The recommendation was finalized before AI generation. Do not let a
                 // model response replace the selected user-owned outfit afterwards.
                 result.recommendedClosetItemIds = [...job.closetItemIds];
-            } catch {
-                result = createFallbackResult(job, this.fallbackImageUrlFor(job.id));
+            } catch (error) {
+                this.logger.error('Outfit AI generation failed; using fallback.', {
+                    jobId: job.id,
+                    code: error.code ?? 'AI_GENERATION_FAILED',
+                    message: error.message,
+                    upstreamStatus: error.upstreamStatus ?? null
+                });
+                try {
+                    result = this.fallbackAdapter
+                        ? await this.fallbackAdapter.generate({
+                            jobId: job.id,
+                            userId: job.userId,
+                            closetItemIds: job.closetItemIds,
+                            inputSnapshot: job.inputSnapshot
+                        })
+                        : createFallbackResult(job, this.fallbackImageUrlFor(job.id));
+                } catch (fallbackError) {
+                    this.logger.error('Dynamic outfit fallback failed; using static fallback.', {
+                        jobId: job.id,
+                        message: fallbackError.message
+                    });
+                    result = createFallbackResult(job, this.fallbackImageUrlFor(job.id));
+                }
             }
             const transitioned = await this.repository.markQcPending(job.id);
             if (transitioned.count !== 1) throw new Error('Outfit job QC transition failed.');

@@ -107,7 +107,10 @@ describe('GeminiOutfitAiAdapter', () => {
             apiKey: 'key', imageService: createImageService(),
             fetchImpl: async () => new Response('rate limited', { status: 429 })
         });
-        await assert.rejects(() => rejected.generate({ userId: 1, inputSnapshot: snapshot }), { code: 'AI_UNAVAILABLE' });
+        await assert.rejects(() => rejected.generate({ userId: 1, inputSnapshot: snapshot }), {
+            code: 'AI_QUOTA_EXCEEDED',
+            upstreamStatus: 429
+        });
 
         const timedOut = new GeminiOutfitAiAdapter({
             apiKey: 'key', imageService: createImageService(), timeoutMs: 5,
